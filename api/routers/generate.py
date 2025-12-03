@@ -56,10 +56,10 @@ async def generate_video_task(job_id: str, count: int):
                 # Fetch ayat data
                 ayat_data = await quran_service.get_ayat(surah, ayat, settings.qari)
                 
-                # Get background
-                background = bg_manager.get_random_background()
+                # Get background (download from Pexels if none available)
+                background = await bg_manager.get_or_download_background()
                 if not background:
-                    raise Exception("No background videos available")
+                    raise Exception("No background videos available and failed to download from Pexels")
                 
                 # Download audio
                 import tempfile
