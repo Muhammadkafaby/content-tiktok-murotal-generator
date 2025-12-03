@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y \
     fonts-noto-color-emoji \
     fonts-dejavu-core \
     fonts-freefont-ttf \
+    fonts-noto-core \
+    fonts-arabeyes \
     libglib2.0-0 \
     libnss3 \
     libnspr4 \

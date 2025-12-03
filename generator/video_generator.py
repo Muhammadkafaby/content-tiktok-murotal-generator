@@ -21,16 +21,23 @@ class VideoGenerator:
         self.width = VIDEO_WIDTH
         self.height = VIDEO_HEIGHT
         self.fps = VIDEO_FPS
-        # Try to find a suitable font
+        # Font paths for regular text
         self.font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
             "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
         ]
+        # Font paths for Arabic text
+        self.arabic_font_paths = [
+            "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+            "/usr/share/fonts/truetype/fonts-arabeyes/ae_AlArabiya.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ]
     
-    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:
+    def _get_font(self, size: int, arabic: bool = False) -> ImageFont.FreeTypeFont:
         """Get available font"""
-        for font_path in self.font_paths:
+        font_list = self.arabic_font_paths if arabic else self.font_paths
+        for font_path in font_list:
             if os.path.exists(font_path):
                 return ImageFont.truetype(font_path, size)
         # Fallback to default
@@ -41,13 +48,14 @@ class VideoGenerator:
         text: str,
         fontsize: int,
         color: str = 'white',
-        max_width: int = None
+        max_width: int = None,
+        arabic: bool = False
     ) -> np.ndarray:
         """Create text image using PIL (no ImageMagick needed)"""
         if max_width is None:
             max_width = self.width - 100
         
-        font = self._get_font(fontsize)
+        font = self._get_font(fontsize, arabic=arabic)
         
         # Wrap text
         wrapped_text = self._wrap_text_pil(text, font, max_width)
@@ -131,18 +139,25 @@ class VideoGenerator:
                 video = video.subclip(0, audio_duration)
             
             # Create text overlays using PIL (no ImageMagick)
-            arab_img = self._create_text_image(text_arab, fontsize=42, color='white')
+            arab_img = self._create_text_image(text_arab, fontsize=42, color='white', arabic=True)
             trans_img = self._create_text_image(text_translation, fontsize=28, color='white')
+            
+            # Create surah reference text (QS: Surah Name: Ayat)
+            surah_ref = f"QS. {surah_name}: {ayat_number}"
+            ref_img = self._create_text_image(surah_ref, fontsize=24, color='#FFD700')  # Gold color
             
             # Create ImageClips from PIL images
             arab_clip = ImageClip(arab_img).set_duration(audio_duration)
-            arab_clip = arab_clip.set_position(('center', 0.30), relative=True)
+            arab_clip = arab_clip.set_position(('center', 0.25), relative=True)
             
             trans_clip = ImageClip(trans_img).set_duration(audio_duration)
-            trans_clip = trans_clip.set_position(('center', 0.65), relative=True)
+            trans_clip = trans_clip.set_position(('center', 0.60), relative=True)
+            
+            ref_clip = ImageClip(ref_img).set_duration(audio_duration)
+            ref_clip = ref_clip.set_position(('center', 0.90), relative=True)
             
             # Composite video
-            final = CompositeVideoClip([video, arab_clip, trans_clip])
+            final = CompositeVideoClip([video, arab_clip, trans_clip, ref_clip])
             final = final.set_audio(audio)
             
             # Write output
