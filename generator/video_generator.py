@@ -121,6 +121,9 @@ class VideoGenerator:
             # Resize and crop video to 9:16
             video = self._resize_to_portrait(video)
             
+            # Darken the background (reduce brightness to 50%)
+            video = video.fx(lambda clip: clip.fl_image(self._darken_frame))
+            
             # Trim or loop video to match audio duration
             if video.duration < audio_duration:
                 video = video.loop(duration=audio_duration)
@@ -171,6 +174,12 @@ class VideoGenerator:
         except Exception as e:
             raise Exception(f"Video generation failed: {str(e)}")
 
+    
+    def _darken_frame(self, frame: np.ndarray) -> np.ndarray:
+        """Darken video frame by reducing brightness"""
+        # Reduce brightness to 50% (0.5 multiplier)
+        darkened = (frame * 0.5).astype(np.uint8)
+        return darkened
     
     def _resize_to_portrait(self, video: VideoFileClip) -> VideoFileClip:
         """Resize video to 9:16 portrait format"""
