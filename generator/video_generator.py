@@ -152,20 +152,20 @@ class VideoGenerator:
             ref_height = ref_img.shape[0]
             
             # Calculate dynamic positions based on content height
-            # Total available height with margins (top 10%, bottom 8%)
-            top_margin = int(self.height * 0.10)
-            bottom_margin = int(self.height * 0.08)
-            available_height = self.height - top_margin - bottom_margin - ref_height
+            # Margins: top 8%, bottom 15% (more space at bottom for ref)
+            top_margin = int(self.height * 0.08)
+            bottom_margin = int(self.height * 0.15)
             
             # Calculate spacing between elements
-            total_content_height = arab_height + trans_height
-            spacing = (available_height - total_content_height) // 3
-            spacing = max(spacing, 30)  # Minimum 30px spacing
+            total_content_height = arab_height + trans_height + ref_height
+            available_height = self.height - top_margin - bottom_margin - total_content_height
+            spacing = available_height // 4
+            spacing = max(spacing, 25)  # Minimum 25px spacing
             
             # Position calculations (in pixels from top)
             arab_y = top_margin + spacing
             trans_y = arab_y + arab_height + spacing
-            ref_y = self.height - bottom_margin - ref_height
+            ref_y = trans_y + trans_height + spacing  # Reference right after translation
             
             # Create ImageClips with calculated positions
             arab_clip = ImageClip(arab_img).set_duration(audio_duration)
