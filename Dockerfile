@@ -3,7 +3,7 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
@@ -13,8 +13,11 @@ FROM python:3.11-slim
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    imagemagick \
     fonts-noto-cjk \
     fonts-noto-color-emoji \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
     libglib2.0-0 \
     libnss3 \
     libnspr4 \
@@ -33,6 +36,12 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Fix ImageMagick security policy to allow text operations
+RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \
+    mv /etc/ImageMagick-6/policy.xml /etc/ImageMagick-6/policy.xml.bak && \
+    cat /etc/ImageMagick-6/policy.xml.bak | sed 's/rights="none"/rights="read|write"/g' > /etc/ImageMagick-6/policy.xml; \
+    fi
 
 WORKDIR /app
 

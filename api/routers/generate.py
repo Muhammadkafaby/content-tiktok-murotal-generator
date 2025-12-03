@@ -44,6 +44,10 @@ async def generate_video_task(job_id: str, count: int):
         used_ayat = video_repo.get_used_ayat()
         
         for i in range(count):
+            # Check if cancelled
+            if current_job_id is None:
+                break
+                
             try:
                 # Get random ayat
                 surah, ayat = quran_service.get_random_ayat_reference(used_ayat)
@@ -93,8 +97,15 @@ async def generate_video_task(job_id: str, count: int):
                 job_repo.increment_failed(job_id)
                 print(f"Error generating video: {e}")
         
+        # Mark job as completed if not cancelled
+        if current_job_id is not None:
+            job_repo.update_status(job_id, "completed")
+        
         await quran_service.close()
         
+    except Exception as e:
+        print(f"Job error: {e}")
+        job_repo.update_status(job_id, "failed")
     finally:
         db.close()
         current_job_id = None
@@ -140,11 +151,24 @@ async def cancel_generation(db: Session = Depends(get_db)):
     """Cancel current generation job"""
     global current_job_id
     
-    if not current_job_id:
-        raise HTTPException(status_code=400, detail="No generation in progress")
-    
     job_repo = JobRepository(db)
-    job_repo.update_status(current_job_id, "cancelled")
+    
+    # Get current running job from DB
+    current_job = job_repo.get_current_job()
+    
+    if current_job:
+        job_repo.update_status(current_job.id, "cancelled")
+    
+    # Reset global state
     current_job_id = None
     
     return {"status": "cancelled"}
+
+
+@router.post("/reset")
+async def reset_generation(db: Session = Depends(get_db)):
+    """Reset generation state (force clear stuck jobs)"""
+    global current_job_id
+    current_job_id = None
+    
+    return {"status": "reset"}

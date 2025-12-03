@@ -36,6 +36,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health check endpoint (must be before static files mount)
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy"}
+
 # Include routers
 app.include_router(videos.router, prefix="/api/videos", tags=["Videos"])
 app.include_router(generate.router, prefix="/api/generate", tags=["Generate"])
@@ -44,11 +49,6 @@ app.include_router(stats.router, prefix="/api/stats", tags=["Stats"])
 app.include_router(tiktok.router, prefix="/api/tiktok", tags=["TikTok"])
 app.include_router(caption.router, prefix="/api/caption", tags=["Caption"])
 
-# Serve static files (frontend)
+# Serve static files (frontend) - must be last
 if os.path.exists("frontend/dist"):
     app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
-
-
-@app.get("/api/health")
-async def health_check():
-    return {"status": "healthy"}

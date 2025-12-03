@@ -1,9 +1,17 @@
 import os
 import uuid
 import tempfile
+import numpy as np
 from pathlib import Path
-from typing import Dict, Any, Optional
-from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
+from typing import Dict, Any, Optional, Tuple
+from PIL import Image, ImageDraw, ImageFont
+
+# Fix for Pillow 10+ compatibility with moviepy
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
+
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
 from api.config import VIDEOS_DIR, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS
 
 
@@ -13,6 +21,80 @@ class VideoGenerator:
         self.width = VIDEO_WIDTH
         self.height = VIDEO_HEIGHT
         self.fps = VIDEO_FPS
+        # Try to find a suitable font
+        self.font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        ]
+    
+    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:
+        """Get available font"""
+        for font_path in self.font_paths:
+            if os.path.exists(font_path):
+                return ImageFont.truetype(font_path, size)
+        # Fallback to default
+        return ImageFont.load_default()
+    
+    def _create_text_image(
+        self,
+        text: str,
+        fontsize: int,
+        color: str = 'white',
+        max_width: int = None
+    ) -> np.ndarray:
+        """Create text image using PIL (no ImageMagick needed)"""
+        if max_width is None:
+            max_width = self.width - 100
+        
+        font = self._get_font(fontsize)
+        
+        # Wrap text
+        wrapped_text = self._wrap_text_pil(text, font, max_width)
+        
+        # Calculate image size
+        dummy_img = Image.new('RGBA', (1, 1))
+        draw = ImageDraw.Draw(dummy_img)
+        bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
+        text_width = bbox[2] - bbox[0] + 40
+        text_height = bbox[3] - bbox[1] + 40
+        
+        # Create image with transparent background
+        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Draw text with shadow for better visibility
+        shadow_offset = 2
+        draw.multiline_text((20 + shadow_offset, 20 + shadow_offset), wrapped_text, 
+                           font=font, fill=(0, 0, 0, 180), align='center')
+        draw.multiline_text((20, 20), wrapped_text, font=font, fill=color, align='center')
+        
+        return np.array(img)
+
+    
+    def _wrap_text_pil(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
+        """Wrap text to fit within max_width using PIL"""
+        words = text.split()
+        lines = []
+        current_line = []
+        
+        dummy_img = Image.new('RGBA', (1, 1))
+        draw = ImageDraw.Draw(dummy_img)
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            if bbox[2] - bbox[0] <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return '\n'.join(lines)
     
     async def generate_video(
         self,
@@ -45,23 +127,16 @@ class VideoGenerator:
             else:
                 video = video.subclip(0, audio_duration)
             
-            # Create text overlays
-            arab_clip = self._create_text_clip(
-                text_arab,
-                fontsize=48,
-                color='white',
-                position=('center', 0.35),
-                duration=audio_duration,
-                font='Arial'  # TODO: Use Arabic font
-            )
+            # Create text overlays using PIL (no ImageMagick)
+            arab_img = self._create_text_image(text_arab, fontsize=42, color='white')
+            trans_img = self._create_text_image(text_translation, fontsize=28, color='white')
             
-            trans_clip = self._create_text_clip(
-                text_translation,
-                fontsize=32,
-                color='white',
-                position=('center', 0.65),
-                duration=audio_duration
-            )
+            # Create ImageClips from PIL images
+            arab_clip = ImageClip(arab_img).set_duration(audio_duration)
+            arab_clip = arab_clip.set_position(('center', 0.30), relative=True)
+            
+            trans_clip = ImageClip(trans_img).set_duration(audio_duration)
+            trans_clip = trans_clip.set_position(('center', 0.65), relative=True)
             
             # Composite video
             final = CompositeVideoClip([video, arab_clip, trans_clip])
@@ -74,7 +149,8 @@ class VideoGenerator:
                 codec='libx264',
                 audio_codec='aac',
                 threads=4,
-                preset='medium'
+                preset='medium',
+                logger=None
             )
             
             # Get file info
@@ -94,6 +170,7 @@ class VideoGenerator:
             
         except Exception as e:
             raise Exception(f"Video generation failed: {str(e)}")
+
     
     def _resize_to_portrait(self, video: VideoFileClip) -> VideoFileClip:
         """Resize video to 9:16 portrait format"""
@@ -118,54 +195,3 @@ class VideoGenerator:
             )
         
         return video.resize((self.width, self.height))
-    
-    def _create_text_clip(
-        self,
-        text: str,
-        fontsize: int,
-        color: str,
-        position: tuple,
-        duration: float,
-        font: str = 'Arial'
-    ) -> TextClip:
-        """Create text clip with styling"""
-        # Wrap long text
-        max_chars = 40
-        wrapped_text = self._wrap_text(text, max_chars)
-        
-        clip = TextClip(
-            wrapped_text,
-            fontsize=fontsize,
-            color=color,
-            font=font,
-            method='caption',
-            size=(self.width - 100, None),
-            align='center'
-        )
-        
-        clip = clip.set_position(position, relative=True)
-        clip = clip.set_duration(duration)
-        
-        return clip
-    
-    def _wrap_text(self, text: str, max_chars: int) -> str:
-        """Wrap text to multiple lines"""
-        words = text.split()
-        lines = []
-        current_line = []
-        current_length = 0
-        
-        for word in words:
-            if current_length + len(word) + 1 <= max_chars:
-                current_line.append(word)
-                current_length += len(word) + 1
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-                current_length = len(word)
-        
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return '\n'.join(lines)
