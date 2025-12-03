@@ -77,7 +77,7 @@ function Videos() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Videos ({total})</h1>
+      <h1 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-6">Videos ({total})</h1>
 
       {loading ? (
         <div className="text-center py-10">Loading...</div>
@@ -87,7 +87,7 @@ function Videos() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
             {videos.map(video => (
               <div key={video.id} className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="bg-emerald-100 h-40 flex items-center justify-center">
