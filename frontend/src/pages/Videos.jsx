@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { videosApi } from '../api'
+import { videosApi, tiktokApi } from '../api'
 
 function Videos() {
   const [videos, setVideos] = useState([])
@@ -35,6 +35,18 @@ function Videos() {
     }
   }
 
+  const handlePostToTikTok = async (video) => {
+    if (!confirm(`Post "${video.surah_name} - Ayat ${video.ayat}" to TikTok?`)) return
+    
+    try {
+      const res = await tiktokApi.post(video.id)
+      alert(res.data.message || 'Posted to TikTok!')
+      loadVideos()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to post to TikTok')
+    }
+  }
+
   const totalPages = Math.ceil(total / limit)
 
   return (
@@ -62,18 +74,31 @@ function Videos() {
                     {video.duration?.toFixed(1)}s • {(video.file_size / 1024 / 1024).toFixed(1)} MB
                   </p>
                   
-                  <div className="flex gap-2 mt-4">
-                    <a
-                      href={videosApi.download(video.id)}
-                      className="flex-1 bg-emerald-600 text-white text-center py-2 rounded text-sm hover:bg-emerald-700"
-                    >
-                      Download
-                    </a>
+                  <div className="flex flex-col gap-2 mt-4">
+                    <div className="flex gap-2">
+                      <a
+                        href={videosApi.download(video.id)}
+                        className="flex-1 bg-emerald-600 text-white text-center py-2 rounded text-sm hover:bg-emerald-700"
+                      >
+                        Download
+                      </a>
+                      <button
+                        onClick={() => handleDelete(video.id)}
+                        className="px-4 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                     <button
-                      onClick={() => handleDelete(video.id)}
-                      className="px-4 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200"
+                      onClick={() => handlePostToTikTok(video)}
+                      disabled={video.tiktok_posted}
+                      className={`w-full py-2 rounded text-sm ${
+                        video.tiktok_posted 
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                          : 'bg-black text-white hover:bg-gray-800'
+                      }`}
                     >
-                      🗑️
+                      {video.tiktok_posted ? '✓ Posted to TikTok' : '🎵 Post to TikTok'}
                     </button>
                   </div>
                 </div>

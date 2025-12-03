@@ -97,3 +97,30 @@ class TikTokRepository:
         return self.db.query(PostHistory)\
             .filter(PostHistory.status == "success")\
             .count()
+    
+    def add_post_history(self, video_id: str, status: str, error_message: str = None) -> PostHistory:
+        """Add post history record"""
+        post = PostHistory(
+            video_id=video_id,
+            caption="",
+            status=status,
+            error_message=error_message
+        )
+        self.db.add(post)
+        self.db.commit()
+        self.db.refresh(post)
+        return post
+    
+    def get_history(self, limit: int = 20) -> List[dict]:
+        """Get posting history as list of dicts"""
+        posts = self.get_post_history(limit)
+        return [
+            {
+                "id": str(post.id),
+                "video_id": post.video_id,
+                "status": post.status,
+                "posted_at": post.posted_at.isoformat() if post.posted_at else None,
+                "error_message": post.error_message
+            }
+            for post in posts
+        ]

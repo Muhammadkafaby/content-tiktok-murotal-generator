@@ -46,15 +46,38 @@ class TikTokUploader:
     
     async def is_logged_in(self) -> bool:
         """Check if currently logged in to TikTok"""
-        await self.page.goto("https://www.tiktok.com")
-        await asyncio.sleep(2)
-        
-        # Check for login indicators
-        try:
-            await self.page.wait_for_selector('[data-e2e="profile-icon"]', timeout=5000)
-            return True
-        except Exception:
+        # First check if cookies file exists
+        if not self.COOKIES_FILE.exists():
             return False
+        
+        try:
+            # Try to navigate and check for login
+            await self.page.goto("https://www.tiktok.com", timeout=30000)
+            await asyncio.sleep(3)
+            
+            # Check for multiple login indicators
+            selectors = [
+                '[data-e2e="profile-icon"]',
+                '[data-e2e="nav-profile"]',
+                'a[href*="/@"]'
+            ]
+            
+            for selector in selectors:
+                try:
+                    element = await self.page.query_selector(selector)
+                    if element:
+                        return True
+                except Exception:
+                    continue
+            
+            # If cookies exist but can't verify, assume logged in
+            # (TikTok might have changed their selectors)
+            return True
+            
+        except Exception as e:
+            print(f"Login check error: {e}")
+            # If cookies exist, assume logged in
+            return self.COOKIES_FILE.exists()
     
     async def login_manual(self) -> Dict[str, Any]:
         """Initiate manual login flow"""

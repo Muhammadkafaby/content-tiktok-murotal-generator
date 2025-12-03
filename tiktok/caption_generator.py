@@ -72,7 +72,19 @@ Instruksi:
         
         return self.generate_template_caption(surah_name, ayat_number, translation, hashtags)
     
-    async def generate_caption(
+    def generate_caption(
+        self,
+        surah_name: str,
+        ayat_number: int,
+        text_translation: str,
+        hashtags: str = None
+    ) -> str:
+        """Generate caption (sync version for simple use)"""
+        return self.generate_template_caption(
+            surah_name, ayat_number, text_translation, hashtags
+        )
+    
+    async def generate_caption_async(
         self,
         mode: str,
         surah_name: str,
@@ -81,7 +93,7 @@ Instruksi:
         translation: str,
         hashtags: str = None
     ) -> str:
-        """Generate caption based on mode"""
+        """Generate caption based on mode (async)"""
         if mode == "ai":
             return await self.generate_ai_caption(
                 surah_name, ayat_number, text_arab, translation, hashtags
