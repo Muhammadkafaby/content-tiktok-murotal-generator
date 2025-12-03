@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: quran-video-generator
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ./data/videos:/app/data/videos
+      - ./data/backgrounds:/app/data/backgrounds
+      - ./data/db:/app/data/db
+      - ./data/sessions:/app/data/sessions
+      - ./data/logs:/app/data/logs
+    environment:
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=8080
+      - DATA_DIR=/app/data
+    # Required for Playwright headless browser
+    shm_size: '2gb'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  videos:
+  backgrounds:
+  db:
+  sessions:
+  logs:
