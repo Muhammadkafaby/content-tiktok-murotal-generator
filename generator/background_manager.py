@@ -131,17 +131,39 @@ class BackgroundManager:
         
         return None
     
-    async def get_or_download_background(self) -> Optional[str]:
-        """Get existing background or download new one from Pexels"""
-        # First try to get existing background
-        background = self.get_random_background()
+    async def get_or_download_background(self, force_new: bool = False) -> Optional[str]:
+        """Get existing background or download new one from Pexels
         
-        if background:
-            return background
+        Args:
+            force_new: If True, always download a new background from Pexels
+        """
+        backgrounds = self.get_backgrounds()
         
-        # If no backgrounds, try to download from Pexels
-        print("No local backgrounds found, downloading from Pexels...")
-        return await self.download_from_pexels()
+        # If force_new or no backgrounds exist, download from Pexels
+        if force_new or not backgrounds:
+            if not backgrounds:
+                print("No local backgrounds found, downloading from Pexels...")
+            else:
+                print("Downloading new background from Pexels for variety...")
+            
+            new_background = await self.download_from_pexels()
+            if new_background:
+                return new_background
+            
+            # Fallback to existing if download fails
+            if backgrounds:
+                return random.choice(backgrounds)
+            return None
+        
+        # 30% chance to download new background for variety (if API key is set)
+        if self.pexels_api_key and random.random() < 0.3:
+            print("Downloading new background from Pexels for variety...")
+            new_background = await self.download_from_pexels()
+            if new_background:
+                return new_background
+        
+        # Use existing background
+        return random.choice(backgrounds)
     
     def background_exists(self, filename: str) -> bool:
         """Check if background file exists"""
