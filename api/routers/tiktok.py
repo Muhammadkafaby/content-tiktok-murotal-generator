@@ -105,6 +105,44 @@ async def get_tiktok_status():
         return {"logged_in": False, "username": None}
 
 
+@router.get("/caption/{video_id}")
+async def generate_caption(video_id: str, db: Session = Depends(get_db)):
+    """Generate TikTok caption for a video"""
+    try:
+        video_repo = VideoRepository(db)
+        video = video_repo.get_by_id(video_id)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Get hashtags from settings
+        from api.repositories.settings_repository import SettingsRepository
+        settings_repo = SettingsRepository(db)
+        settings = settings_repo.get()
+        hashtags = settings.tiktok_hashtags or "#quran #islam #muslim #ayat #alquran #fyp"
+        
+        # Generate caption
+        caption_gen = CaptionGenerator()
+        caption = caption_gen.generate_caption(
+            surah_name=video.surah_name,
+            ayat_number=video.ayat,
+            text_translation=video.text_translation,
+            hashtags=hashtags
+        )
+        
+        return {
+            "caption": caption,
+            "surah_name": video.surah_name,
+            "ayat": video.ayat,
+            "download_url": f"/api/videos/{video_id}/download"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/post/{video_id}")
 async def post_to_tiktok(video_id: str, db: Session = Depends(get_db)):
     """Manually post a video to TikTok"""

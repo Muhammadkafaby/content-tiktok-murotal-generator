@@ -30,6 +30,7 @@ export const tiktokApi = {
   login: () => api.post('/tiktok/login'),
   uploadCookies: (cookies) => api.post('/tiktok/upload-cookies', { cookies }),
   status: () => api.get('/tiktok/status'),
+  getCaption: (videoId) => api.get(`/tiktok/caption/${videoId}`),
   post: (videoId) => api.post(`/tiktok/post/${videoId}`),
   history: () => api.get('/tiktok/history'),
   logout: () => api.post('/tiktok/logout')
