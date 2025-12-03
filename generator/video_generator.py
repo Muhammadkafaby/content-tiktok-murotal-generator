@@ -139,22 +139,43 @@ class VideoGenerator:
                 video = video.subclip(0, audio_duration)
             
             # Create text overlays using PIL (no ImageMagick)
-            arab_img = self._create_text_image(text_arab, fontsize=42, color='white', arabic=True)
-            trans_img = self._create_text_image(text_translation, fontsize=28, color='white')
+            arab_img = self._create_text_image(text_arab, fontsize=48, color='white', arabic=True)
+            trans_img = self._create_text_image(text_translation, fontsize=32, color='white')
             
             # Create surah reference text (QS: Surah Name: Ayat)
             surah_ref = f"QS. {surah_name}: {ayat_number}"
-            ref_img = self._create_text_image(surah_ref, fontsize=24, color='#FFD700')  # Gold color
+            ref_img = self._create_text_image(surah_ref, fontsize=28, color='#FFD700')  # Gold color
             
-            # Create ImageClips from PIL images
+            # Get image heights for dynamic positioning
+            arab_height = arab_img.shape[0]
+            trans_height = trans_img.shape[0]
+            ref_height = ref_img.shape[0]
+            
+            # Calculate dynamic positions based on content height
+            # Total available height with margins (top 10%, bottom 8%)
+            top_margin = int(self.height * 0.10)
+            bottom_margin = int(self.height * 0.08)
+            available_height = self.height - top_margin - bottom_margin - ref_height
+            
+            # Calculate spacing between elements
+            total_content_height = arab_height + trans_height
+            spacing = (available_height - total_content_height) // 3
+            spacing = max(spacing, 30)  # Minimum 30px spacing
+            
+            # Position calculations (in pixels from top)
+            arab_y = top_margin + spacing
+            trans_y = arab_y + arab_height + spacing
+            ref_y = self.height - bottom_margin - ref_height
+            
+            # Create ImageClips with calculated positions
             arab_clip = ImageClip(arab_img).set_duration(audio_duration)
-            arab_clip = arab_clip.set_position(('center', 0.25), relative=True)
+            arab_clip = arab_clip.set_position(('center', arab_y))
             
             trans_clip = ImageClip(trans_img).set_duration(audio_duration)
-            trans_clip = trans_clip.set_position(('center', 0.60), relative=True)
+            trans_clip = trans_clip.set_position(('center', trans_y))
             
             ref_clip = ImageClip(ref_img).set_duration(audio_duration)
-            ref_clip = ref_clip.set_position(('center', 0.90), relative=True)
+            ref_clip = ref_clip.set_position(('center', ref_y))
             
             # Composite video
             final = CompositeVideoClip([video, arab_clip, trans_clip, ref_clip])
