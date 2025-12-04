@@ -40,6 +40,7 @@ ATURAN PENTING:
 6. Maksimal 200 kata
 7. Gunakan emoji secukupnya (1-3 saja)
 8. Buat seperti curhat ke teman, bukan ceramah
+9. JANGAN tambahkan hashtag apapun (hashtag akan ditambahkan otomatis)
 
 CONTOH GAYA YANG DIINGINKAN:
 "Pernah nggak sih merasa jauh dari Allah? Ayat ini kayak pelukan hangat buat hati yang lelah...
@@ -113,11 +114,14 @@ Follow untuk ayat harian lainnya.
         # Try AI generation
         ai_caption = self._generate_with_ai(surah_name, ayat_number, text_translation)
         if ai_caption:
-            # Ensure hashtags are included
-            if hashtags and hashtags not in ai_caption:
-                ai_caption += f"\n\n{hashtags}"
-            elif not hashtags and self.DEFAULT_HASHTAGS not in ai_caption:
-                ai_caption += f"\n\n{self.DEFAULT_HASHTAGS}"
+            # Check if caption already has hashtags
+            has_hashtags = "#" in ai_caption
+            
+            # Only add hashtags if not already present
+            if not has_hashtags:
+                final_hashtags = hashtags if hashtags else self.DEFAULT_HASHTAGS
+                ai_caption += f"\n\n{final_hashtags}"
+            
             return ai_caption
         
         # Fallback to template

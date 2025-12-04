@@ -9,6 +9,9 @@ function Videos() {
   const [captionModal, setCaptionModal] = useState(null)
   const [captionLoading, setCaptionLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [selectedVideos, setSelectedVideos] = useState([])
+  const [selectMode, setSelectMode] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const limit = 10
 
   useEffect(() => {
@@ -35,6 +38,48 @@ function Videos() {
       loadVideos()
     } catch (err) {
       alert('Failed to delete')
+    }
+  }
+
+  const handleSelectVideo = (id) => {
+    setSelectedVideos(prev => 
+      prev.includes(id) 
+        ? prev.filter(v => v !== id)
+        : [...prev, id]
+    )
+  }
+
+  const handleSelectAll = () => {
+    if (selectedVideos.length === videos.length) {
+      setSelectedVideos([])
+    } else {
+      setSelectedVideos(videos.map(v => v.id))
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedVideos.length === 0) return
+    if (!confirm(`Delete ${selectedVideos.length} selected videos?`)) return
+    
+    setDeleting(true)
+    try {
+      for (const id of selectedVideos) {
+        await videosApi.delete(id)
+      }
+      setSelectedVideos([])
+      setSelectMode(false)
+      loadVideos()
+    } catch (err) {
+      alert('Failed to delete some videos')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const toggleSelectMode = () => {
+    setSelectMode(!selectMode)
+    if (selectMode) {
+      setSelectedVideos([])
     }
   }
 
@@ -77,7 +122,41 @@ function Videos() {
 
   return (
     <div>
-      <h1 className="text-xl lg:text-2xl font-bold mb-4 lg:mb-6">Videos ({total})</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 lg:mb-6">
+        <h1 className="text-xl lg:text-2xl font-bold">Videos ({total})</h1>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={toggleSelectMode}
+            className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+              selectMode 
+                ? 'bg-gray-200 text-gray-700' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {selectMode ? 'Cancel' : 'Select'}
+          </button>
+          
+          {selectMode && (
+            <>
+              <button
+                onClick={handleSelectAll}
+                className="px-4 py-2 bg-blue-100 text-blue-600 rounded text-sm font-medium hover:bg-blue-200"
+              >
+                {selectedVideos.length === videos.length ? 'Deselect All' : 'Select All'}
+              </button>
+              
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedVideos.length === 0 || deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : `Delete (${selectedVideos.length})`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       {loading ? (
         <div className="text-center py-10">Loading...</div>
@@ -89,8 +168,31 @@ function Videos() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
             {videos.map(video => (
-              <div key={video.id} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="bg-emerald-100 h-40 flex items-center justify-center">
+              <div 
+                key={video.id} 
+                className={`bg-white rounded-lg shadow overflow-hidden relative ${
+                  selectMode && selectedVideos.includes(video.id) ? 'ring-2 ring-emerald-500' : ''
+                }`}
+              >
+                {selectMode && (
+                  <div 
+                    className="absolute top-2 left-2 z-10"
+                    onClick={() => handleSelectVideo(video.id)}
+                  >
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer ${
+                      selectedVideos.includes(video.id)
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'bg-white border-gray-300'
+                    }`}>
+                      {selectedVideos.includes(video.id) && '✓'}
+                    </div>
+                  </div>
+                )}
+                
+                <div 
+                  className={`bg-emerald-100 h-40 flex items-center justify-center ${selectMode ? 'cursor-pointer' : ''}`}
+                  onClick={() => selectMode && handleSelectVideo(video.id)}
+                >
                   <span className="text-4xl">🕌</span>
                 </div>
                 <div className="p-4">
@@ -100,29 +202,31 @@ function Videos() {
                     {video.duration?.toFixed(1)}s • {(video.file_size / 1024 / 1024).toFixed(1)} MB
                   </p>
                   
-                  <div className="flex flex-col gap-2 mt-4">
-                    <div className="flex gap-2">
-                      <a
-                        href={videosApi.download(video.id)}
-                        className="flex-1 bg-emerald-600 text-white text-center py-2 rounded text-sm hover:bg-emerald-700"
-                      >
-                        Download
-                      </a>
+                  {!selectMode && (
+                    <div className="flex flex-col gap-2 mt-4">
+                      <div className="flex gap-2">
+                        <a
+                          href={videosApi.download(video.id)}
+                          className="flex-1 bg-emerald-600 text-white text-center py-2 rounded text-sm hover:bg-emerald-700"
+                        >
+                          Download
+                        </a>
+                        <button
+                          onClick={() => handleDelete(video.id)}
+                          className="px-4 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                       <button
-                        onClick={() => handleDelete(video.id)}
-                        className="px-4 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200"
+                        onClick={() => handlePostToTikTok(video)}
+                        disabled={captionLoading}
+                        className="w-full py-2 rounded text-sm bg-black text-white hover:bg-gray-800 disabled:opacity-50"
                       >
-                        🗑️
+                        {captionLoading ? 'Loading...' : '🎵 Post to TikTok'}
                       </button>
                     </div>
-                    <button
-                      onClick={() => handlePostToTikTok(video)}
-                      disabled={captionLoading}
-                      className="w-full py-2 rounded text-sm bg-black text-white hover:bg-gray-800 disabled:opacity-50"
-                    >
-                      {captionLoading ? 'Loading...' : '🎵 Post to TikTok'}
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
