@@ -27,10 +27,10 @@ class VideoGenerator:
         self.hook_duration = 1.5  # Hook duration in seconds
         self.cta_duration = 2.0   # CTA outro duration in seconds
         self.cta_texts = [
-            "Follow untuk ayat harian 🤲",
-            "Like & Follow untuk lebih banyak 💫",
-            "Bagikan kebaikan ini ✨",
-            "Follow untuk inspirasi Quran 📖",
+            "Follow untuk ayat harian",
+            "Like & Follow untuk lebih banyak",
+            "Bagikan kebaikan ini",
+            "Follow untuk inspirasi Quran",
         ]
         # Font paths for regular text
         self.font_paths = [
@@ -198,13 +198,8 @@ class VideoGenerator:
             ref_clip = ImageClip(ref_img).set_duration(audio_duration)
             ref_clip = ref_clip.set_position(('center', ref_y))
             
-            # Create list of clips for main content
+            # Create list of clips for main content (logo disabled for now)
             main_clips = [main_video, arab_clip, trans_clip, ref_clip]
-            
-            # Add logo if exists
-            logo_clip = self._create_logo_clip(audio_duration, ref_y + ref_height + 20)
-            if logo_clip:
-                main_clips.append(logo_clip)
             
             # Composite main content
             main_composite = CompositeVideoClip(main_clips)
@@ -272,15 +267,8 @@ class VideoGenerator:
         cta_text_clip = ImageClip(cta_img).set_duration(self.cta_duration)
         cta_text_clip = cta_text_clip.set_position(('center', 'center'))
         
-        # Add logo below CTA if exists
+        # Composite CTA (logo disabled for now due to transparency issues)
         clips = [cta_bg, cta_text_clip]
-        
-        if self.logo_path.exists():
-            logo_clip = self._create_logo_clip(self.cta_duration, int(self.height * 0.65))
-            if logo_clip:
-                clips.append(logo_clip)
-        
-        # Composite CTA
         cta_composite = CompositeVideoClip(clips)
         
         return cta_composite

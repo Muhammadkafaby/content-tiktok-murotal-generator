@@ -5,50 +5,50 @@ from typing import Optional
 class HookGenerator:
     """Generate engaging hooks for video based on ayat content"""
     
-    # Template hooks berdasarkan tema ayat
+    # Template hooks berdasarkan tema ayat (tanpa emoji)
     HOOK_TEMPLATES = {
         "warning": [
-            "⚠️ Peringatan keras dari Allah...",
-            "🔥 Jangan abaikan ayat ini!",
-            "❗ Allah memperingatkan kita...",
-            "⛔ Hati-hati dengan ini...",
+            "Peringatan keras dari Allah...",
+            "Jangan abaikan ayat ini!",
+            "Allah memperingatkan kita...",
+            "Hati-hati dengan ini...",
         ],
         "promise": [
-            "✨ Janji Allah untuk orang beriman...",
-            "🌟 Kabar gembira untukmu!",
-            "💫 Allah menjanjikan ini...",
-            "🎁 Hadiah dari Allah...",
+            "Janji Allah untuk orang beriman...",
+            "Kabar gembira untukmu!",
+            "Allah menjanjikan ini...",
+            "Hadiah dari Allah...",
         ],
         "guidance": [
-            "📖 Petunjuk hidup dari Allah...",
-            "🧭 Jalan yang benar adalah...",
-            "💡 Allah mengajarkan kita...",
-            "🔑 Kunci kebahagiaan...",
+            "Petunjuk hidup dari Allah...",
+            "Jalan yang benar adalah...",
+            "Allah mengajarkan kita...",
+            "Kunci kebahagiaan...",
         ],
         "reminder": [
-            "💭 Sudahkah kamu ingat ini?",
-            "🤔 Renungkan ayat ini...",
-            "⏰ Pengingat penting!",
-            "📌 Jangan lupa hal ini...",
+            "Sudahkah kamu ingat ini?",
+            "Renungkan ayat ini...",
+            "Pengingat penting!",
+            "Jangan lupa hal ini...",
         ],
         "mercy": [
-            "💝 Kasih sayang Allah...",
-            "🤲 Allah Maha Pengampun...",
-            "❤️ Rahmat Allah sangat luas...",
-            "🌈 Jangan putus asa!",
+            "Kasih sayang Allah...",
+            "Allah Maha Pengampun...",
+            "Rahmat Allah sangat luas...",
+            "Jangan putus asa!",
         ],
         "creation": [
-            "🌍 Keajaiban ciptaan Allah...",
-            "✨ Tanda-tanda kebesaran-Nya...",
-            "🌙 Pernahkah kamu pikirkan ini?",
-            "🔬 Bukti kekuasaan Allah...",
+            "Keajaiban ciptaan Allah...",
+            "Tanda-tanda kebesaran-Nya...",
+            "Pernahkah kamu pikirkan ini?",
+            "Bukti kekuasaan Allah...",
         ],
         "general": [
-            "📖 Dengarkan ayat ini...",
-            "🕌 Al-Quran berkata...",
-            "✨ Ayat yang indah...",
-            "💎 Mutiara Al-Quran...",
-            "🌟 Simak baik-baik...",
+            "Dengarkan ayat ini...",
+            "Al-Quran berkata...",
+            "Ayat yang indah...",
+            "Mutiara Al-Quran...",
+            "Simak baik-baik...",
         ]
     }
     
@@ -86,23 +86,23 @@ class HookGenerator:
         """Generate more specific hook based on content"""
         translation_lower = translation.lower()
         
-        # Specific hooks based on content
+        # Specific hooks based on content (tanpa emoji)
         if "orang-orang yang beriman" in translation_lower:
-            return "👤 Apakah kamu termasuk?"
+            return "Apakah kamu termasuk?"
         elif "bertakwa" in translation_lower:
-            return "🤲 Ciri orang bertakwa..."
+            return "Ciri orang bertakwa..."
         elif "sabar" in translation_lower:
-            return "💪 Kunci kesabaran..."
+            return "Kunci kesabaran..."
         elif "syukur" in translation_lower:
-            return "🙏 Nikmat yang sering dilupakan..."
+            return "Nikmat yang sering dilupakan..."
         elif "doa" in translation_lower or "berdoa" in translation_lower:
-            return "🤲 Doa yang dikabulkan..."
+            return "Doa yang dikabulkan..."
         elif "rezeki" in translation_lower:
-            return "💰 Rahasia rezeki..."
+            return "Rahasia rezeki..."
         elif "ibu" in translation_lower or "orang tua" in translation_lower:
-            return "👨‍👩‍👧 Tentang orang tua..."
+            return "Tentang orang tua..."
         elif "mati" in translation_lower or "kematian" in translation_lower:
-            return "⏳ Kematian pasti datang..."
+            return "Kematian pasti datang..."
         
         return None
     
