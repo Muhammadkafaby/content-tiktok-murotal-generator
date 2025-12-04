@@ -12,6 +12,7 @@ services:
       - ./data/db:/app/data/db
       - ./data/sessions:/app/data/sessions
       - ./data/logs:/app/data/logs
+      - ./logo.png:/app/data/assets/logo.png
     environment:
       - PEXELS_API_KEY=${PEXELS_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

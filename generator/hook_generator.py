@@ -1,117 +1,105 @@
 import random
+import urllib.parse
 from typing import Optional
+import httpx
 
 
 class HookGenerator:
-    """Generate engaging hooks for video based on ayat content"""
+    """Generate engaging viral hooks for video using AI"""
     
-    # Template hooks berdasarkan tema ayat (tanpa emoji)
-    HOOK_TEMPLATES = {
-        "warning": [
-            "Peringatan keras dari Allah...",
-            "Jangan abaikan ayat ini!",
-            "Allah memperingatkan kita...",
-            "Hati-hati dengan ini...",
-        ],
-        "promise": [
-            "Janji Allah untuk orang beriman...",
-            "Kabar gembira untukmu!",
-            "Allah menjanjikan ini...",
-            "Hadiah dari Allah...",
-        ],
-        "guidance": [
-            "Petunjuk hidup dari Allah...",
-            "Jalan yang benar adalah...",
-            "Allah mengajarkan kita...",
-            "Kunci kebahagiaan...",
-        ],
-        "reminder": [
-            "Sudahkah kamu ingat ini?",
-            "Renungkan ayat ini...",
-            "Pengingat penting!",
-            "Jangan lupa hal ini...",
-        ],
-        "mercy": [
-            "Kasih sayang Allah...",
-            "Allah Maha Pengampun...",
-            "Rahmat Allah sangat luas...",
-            "Jangan putus asa!",
-        ],
-        "creation": [
-            "Keajaiban ciptaan Allah...",
-            "Tanda-tanda kebesaran-Nya...",
-            "Pernahkah kamu pikirkan ini?",
-            "Bukti kekuasaan Allah...",
-        ],
-        "general": [
-            "Dengarkan ayat ini...",
-            "Al-Quran berkata...",
-            "Ayat yang indah...",
-            "Mutiara Al-Quran...",
-            "Simak baik-baik...",
+    def __init__(self):
+        self.api_url = "https://api.elrayyxml.web.id/api/ai/chatgpt"
+        
+        # Fallback hooks jika AI tidak tersedia
+        self.fallback_hooks = [
+            "Ayat ini mungkin pesan untuk kamu hari ini...",
+            "Mungkin Allah ingin kamu baca ini...",
+            "Jangan skip, ini penting untuk hidup kamu.",
+            "Dengarkan baik-baik ayat ini...",
+            "Al-Quran punya pesan untukmu...",
         ]
-    }
     
-    # Keywords untuk deteksi tema
-    THEME_KEYWORDS = {
-        "warning": ["azab", "neraka", "siksa", "celaka", "binasa", "hukuman", "murka", "zalim", "kafir", "dosa"],
-        "promise": ["surga", "pahala", "balasan", "nikmat", "kebahagiaan", "beruntung", "menang", "selamat"],
-        "guidance": ["petunjuk", "jalan", "benar", "lurus", "perintah", "larangan", "hukum", "syariat"],
-        "reminder": ["ingat", "lupa", "lalai", "akhirat", "mati", "kiamat", "hisab"],
-        "mercy": ["ampun", "rahmat", "kasih", "sayang", "taubat", "maaf", "pengampun"],
-        "creation": ["langit", "bumi", "ciptakan", "mencipta", "tanda", "alam", "matahari", "bulan", "bintang"],
-    }
-    
-    def detect_theme(self, translation: str) -> str:
-        """Detect theme from translation text"""
-        translation_lower = translation.lower()
+    def _generate_with_ai(self, translation: str, surah_name: str) -> Optional[str]:
+        """Generate hook using ElrayyXml ChatGPT API"""
         
-        theme_scores = {}
-        for theme, keywords in self.THEME_KEYWORDS.items():
-            score = sum(1 for kw in keywords if kw in translation_lower)
-            if score > 0:
-                theme_scores[theme] = score
-        
-        if theme_scores:
-            return max(theme_scores, key=theme_scores.get)
-        return "general"
-    
-    def generate_hook(self, translation: str, surah_name: str = None) -> str:
-        """Generate hook text based on ayat translation"""
-        theme = self.detect_theme(translation)
-        hooks = self.HOOK_TEMPLATES.get(theme, self.HOOK_TEMPLATES["general"])
-        return random.choice(hooks)
-    
-    def generate_custom_hook(self, translation: str) -> Optional[str]:
-        """Generate more specific hook based on content"""
-        translation_lower = translation.lower()
-        
-        # Specific hooks based on content (tanpa emoji)
-        if "orang-orang yang beriman" in translation_lower:
-            return "Apakah kamu termasuk?"
-        elif "bertakwa" in translation_lower:
-            return "Ciri orang bertakwa..."
-        elif "sabar" in translation_lower:
-            return "Kunci kesabaran..."
-        elif "syukur" in translation_lower:
-            return "Nikmat yang sering dilupakan..."
-        elif "doa" in translation_lower or "berdoa" in translation_lower:
-            return "Doa yang dikabulkan..."
-        elif "rezeki" in translation_lower:
-            return "Rahasia rezeki..."
-        elif "ibu" in translation_lower or "orang tua" in translation_lower:
-            return "Tentang orang tua..."
-        elif "mati" in translation_lower or "kematian" in translation_lower:
-            return "Kematian pasti datang..."
-        
-        return None
+        prompt = f"""Buatkan 1 hook pembuka video TikTok Islami (1-2 kalimat pendek) yang SANGAT RELEVAN dengan ayat Al-Quran berikut.
+
+Ayat dari Surah {surah_name}:
+"{translation}"
+
+ATURAN:
+1. Hook HARUS relevan dengan ISI ayat
+2. Bahasa Indonesia casual yang menyentuh hati
+3. JANGAN pakai emoji
+4. Maksimal 15 kata
+5. Jangan sebut nama surah
+
+Tulis HANYA hook-nya saja:"""
+
+        try:
+            # URL encode the prompt
+            encoded_prompt = urllib.parse.quote(prompt)
+            url = f"{self.api_url}?text={encoded_prompt}"
+            
+            response = httpx.get(url, timeout=15.0)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") and data.get("result"):
+                    hook = data["result"].strip()
+                    # Clean up hook
+                    hook = hook.strip('"\'')
+                    # Remove any prefix like "Hook:" or similar
+                    if ":" in hook and len(hook.split(":")[0]) < 15:
+                        hook = hook.split(":", 1)[1].strip()
+                    # Pastikan tidak terlalu panjang
+                    if len(hook) <= 120:
+                        return hook
+            
+            return None
+            
+        except Exception as e:
+            print(f"AI hook generation failed: {e}")
+            return None
     
     def get_hook(self, translation: str, surah_name: str = None) -> str:
         """Get the best hook for the ayat"""
-        # Try custom hook first
-        custom = self.generate_custom_hook(translation)
-        if custom:
-            return custom
+        # Try AI first
+        if surah_name:
+            ai_hook = self._generate_with_ai(translation, surah_name)
+            if ai_hook:
+                return ai_hook
         
-        # Fall back to template hook
-        return self.generate_hook(translation, surah_name)
+        # Fallback to simple keyword matching
+        return self._get_fallback_hook(translation)
+    
+    def _get_fallback_hook(self, translation: str) -> str:
+        """Get fallback hook based on keywords"""
+        translation_lower = translation.lower()
+        
+        # Specific keyword matching
+        if any(kw in translation_lower for kw in ["azab", "neraka", "siksa", "hukuman"]):
+            return "Jangan sampai kamu termasuk golongan ini..."
+        elif any(kw in translation_lower for kw in ["sabar", "ujian", "cobaan"]):
+            return "Kalau kamu sedang bersabar, ini untukmu..."
+        elif any(kw in translation_lower for kw in ["ampun", "taubat", "rahmat"]):
+            return "Belum terlambat untuk kembali..."
+        elif any(kw in translation_lower for kw in ["surga", "pahala", "balasan"]):
+            return "Janji Allah untuk orang yang beriman..."
+        elif any(kw in translation_lower for kw in ["mati", "kematian", "akhirat"]):
+            return "Kematian pasti datang... sudah siap?"
+        elif any(kw in translation_lower for kw in ["doa", "berdoa"]):
+            return "Doa yang pasti dikabulkan Allah..."
+        elif any(kw in translation_lower for kw in ["rezeki", "nikmat"]):
+            return "Rahasia rezeki yang jarang diketahui..."
+        elif any(kw in translation_lower for kw in ["takut", "gelisah", "sedih"]):
+            return "Kalau hatimu sedang berat, baca ini..."
+        elif any(kw in translation_lower for kw in ["syukur", "bersyukur"]):
+            return "Nikmat yang sering kita lupakan..."
+        elif any(kw in translation_lower for kw in ["orang tua", "ibu", "ayah"]):
+            return "Tentang orang tua... jangan skip ini."
+        elif any(kw in translation_lower for kw in ["beriman", "bertakwa"]):
+            return "Apakah kamu termasuk orang ini?"
+        
+        # Random fallback
+        return random.choice(self.fallback_hooks)

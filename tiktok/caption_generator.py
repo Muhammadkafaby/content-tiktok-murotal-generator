@@ -1,110 +1,101 @@
 from typing import Dict, Any, Optional
 import random
+import urllib.parse
+import httpx
 
 
 class CaptionGenerator:
     DEFAULT_HASHTAGS = "#quran #murotal #islamic #muslim #ayatquran #dakwah #islam #fyp #quranquotes #reminder"
     
-    # Emotional intro templates based on theme
-    INTRO_TEMPLATES = {
-        "warning": [
-            "⚠️ Ayat ini mengingatkan kita...",
-            "🔥 Peringatan penting dari Allah SWT:",
-            "❗ Jangan abaikan firman ini:",
-        ],
-        "promise": [
-            "✨ Kabar gembira dari Allah SWT!",
-            "🌟 Janji indah untuk orang beriman:",
-            "💫 SubhanAllah, Allah menjanjikan:",
-        ],
-        "guidance": [
-            "📖 Petunjuk hidup dari Al-Quran:",
-            "🧭 Allah menunjukkan jalan yang benar:",
-            "💡 Hikmah yang luar biasa:",
-        ],
-        "reminder": [
-            "💭 Renungkan ayat ini dalam-dalam...",
-            "⏰ Pengingat untuk kita semua:",
-            "📌 Jangan pernah lupa hal ini:",
-        ],
-        "mercy": [
-            "💝 Kasih sayang Allah tak terbatas:",
-            "🤲 Allah Maha Pengampun, jangan putus asa!",
-            "❤️ Rahmat Allah meliputi segalanya:",
-        ],
-        "general": [
-            "📖 Ayat yang menyentuh hati:",
-            "✨ Keindahan Al-Quran:",
-            "🕌 Firman Allah yang penuh makna:",
-        ]
-    }
-    
-    # Emotional closing templates
-    CLOSING_TEMPLATES = [
-        "\n\n🤲 Semoga kita termasuk hamba yang mengamalkannya.",
-        "\n\n💫 Tag temanmu yang butuh pengingat ini!",
-        "\n\n❤️ Like & share jika bermanfaat!",
-        "\n\n🌙 Jadikan ini pengingat harianmu.",
-        "\n\n✨ Simpan video ini untuk dibaca lagi.",
-        "\n\n🤲 Aamiin ya Rabbal 'Alamin.",
-    ]
-    
-    # Theme keywords for detection
-    THEME_KEYWORDS = {
-        "warning": ["azab", "neraka", "siksa", "celaka", "binasa", "hukuman", "murka", "zalim", "kafir", "dosa"],
-        "promise": ["surga", "pahala", "balasan", "nikmat", "kebahagiaan", "beruntung", "menang", "selamat", "ridha"],
-        "guidance": ["petunjuk", "jalan", "benar", "lurus", "perintah", "larangan", "hukum", "syariat"],
-        "reminder": ["ingat", "lupa", "lalai", "akhirat", "mati", "kiamat", "hisab"],
-        "mercy": ["ampun", "rahmat", "kasih", "sayang", "taubat", "maaf", "pengampun"],
-    }
-    
     def __init__(self):
-        pass
-    
-    def _detect_theme(self, translation: str) -> str:
-        """Detect theme from translation text"""
-        translation_lower = translation.lower()
+        self.ai_api_url = "https://api.elrayyxml.web.id/api/ai/chatgpt"
         
-        theme_scores = {}
-        for theme, keywords in self.THEME_KEYWORDS.items():
-            score = sum(1 for kw in keywords if kw in translation_lower)
-            if score > 0:
-                theme_scores[theme] = score
-        
-        if theme_scores:
-            return max(theme_scores, key=theme_scores.get)
-        return "general"
+        # Fallback templates jika AI gagal
+        self.fallback_intros = [
+            "Ayat ini menyentuh hati...",
+            "Renungkan firman Allah ini...",
+            "Pesan penting dari Al-Quran:",
+        ]
+        self.fallback_closings = [
+            "Semoga bermanfaat.",
+            "Simpan dan bagikan.",
+            "Follow untuk ayat lainnya.",
+        ]
     
-    def generate_template_caption(
+    def _generate_with_ai(self, surah_name: str, ayat_number: int, translation: str) -> Optional[str]:
+        """Generate caption using AI API"""
+        
+        prompt = f"""Buatkan caption TikTok untuk video ayat Al-Quran berikut:
+
+Surah: {surah_name}
+Ayat: {ayat_number}
+Terjemahan: "{translation}"
+
+ATURAN PENTING:
+1. Bahasa Indonesia yang PERSONAL dan EMOSIONAL
+2. Tone: hangat, menyentuh hati, tidak kaku/formal
+3. Mulai dengan kalimat pembuka yang engaging (tanpa emoji berlebihan)
+4. Sertakan kutipan ayat dengan format: QS. {surah_name}: {ayat_number}
+5. Akhiri dengan ajakan follow yang natural
+6. Maksimal 200 kata
+7. Gunakan emoji secukupnya (1-3 saja)
+8. Buat seperti curhat ke teman, bukan ceramah
+
+CONTOH GAYA YANG DIINGINKAN:
+"Pernah nggak sih merasa jauh dari Allah? Ayat ini kayak pelukan hangat buat hati yang lelah...
+
+QS. Al-Baqarah: 186
+
+'Dan apabila hamba-hamba-Ku bertanya kepadamu tentang Aku, maka sesungguhnya Aku dekat.'
+
+Allah itu dekat. Lebih dekat dari yang kita kira. Tinggal kita mau nggak mendekat ke-Nya.
+
+Simpan buat pengingat ya. Follow buat ayat harian."
+
+Tulis caption-nya:"""
+
+        try:
+            encoded_prompt = urllib.parse.quote(prompt)
+            url = f"{self.ai_api_url}?text={encoded_prompt}"
+            
+            response = httpx.get(url, timeout=15.0)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") and data.get("result"):
+                    caption = data["result"].strip()
+                    # Add hashtags if not present
+                    if "#" not in caption:
+                        caption += f"\n\n{self.DEFAULT_HASHTAGS}"
+                    return caption
+            return None
+        except Exception as e:
+            print(f"AI caption generation failed: {e}")
+            return None
+    
+    def _generate_fallback_caption(
         self,
         surah_name: str,
         ayat_number: int,
         translation: str,
         hashtags: str = None
     ) -> str:
-        """Generate emotional caption using template"""
+        """Generate fallback caption if AI fails"""
         if hashtags is None:
             hashtags = self.DEFAULT_HASHTAGS
         
-        # Detect theme
-        theme = self._detect_theme(translation)
+        intro = random.choice(self.fallback_intros)
+        closing = random.choice(self.fallback_closings)
         
-        # Get intro based on theme
-        intros = self.INTRO_TEMPLATES.get(theme, self.INTRO_TEMPLATES["general"])
-        intro = random.choice(intros)
-        
-        # Get random closing
-        closing = random.choice(self.CLOSING_TEMPLATES)
-        
-        # Build caption
         caption = f"""{intro}
 
-📜 QS. {surah_name}: {ayat_number}
+QS. {surah_name}: {ayat_number}
 
 "{translation}"
+
 {closing}
 
-👆 Follow untuk ayat harian lainnya!
+Follow untuk ayat harian lainnya.
 
 {hashtags}"""
         
@@ -117,7 +108,30 @@ class CaptionGenerator:
         text_translation: str,
         hashtags: str = None
     ) -> str:
-        """Generate caption (sync version)"""
-        return self.generate_template_caption(
+        """Generate caption - try AI first, fallback to template"""
+        
+        # Try AI generation
+        ai_caption = self._generate_with_ai(surah_name, ayat_number, text_translation)
+        if ai_caption:
+            # Ensure hashtags are included
+            if hashtags and hashtags not in ai_caption:
+                ai_caption += f"\n\n{hashtags}"
+            elif not hashtags and self.DEFAULT_HASHTAGS not in ai_caption:
+                ai_caption += f"\n\n{self.DEFAULT_HASHTAGS}"
+            return ai_caption
+        
+        # Fallback to template
+        return self._generate_fallback_caption(
             surah_name, ayat_number, text_translation, hashtags
         )
+    
+    # Alias for backward compatibility
+    def generate_template_caption(
+        self,
+        surah_name: str,
+        ayat_number: int,
+        translation: str,
+        hashtags: str = None
+    ) -> str:
+        """Alias for generate_caption"""
+        return self.generate_caption(surah_name, ayat_number, translation, hashtags)
