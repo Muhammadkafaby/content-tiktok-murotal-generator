@@ -63,7 +63,10 @@ COPY tiktok/ ./tiktok/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Create data directories
-RUN mkdir -p /app/data/videos /app/data/backgrounds /app/data/db /app/data/sessions /app/data/logs
+RUN mkdir -p /app/data/videos /app/data/backgrounds /app/data/db /app/data/sessions /app/data/logs /app/data/assets
+
+# Copy logo
+COPY logo.png /app/data/assets/logo.png
 
 # Environment variables
 ENV PORT=8080

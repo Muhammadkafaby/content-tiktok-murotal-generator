@@ -11,8 +11,9 @@ import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
-from api.config import VIDEOS_DIR, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+from api.config import VIDEOS_DIR, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, DATA_DIR
+from generator.hook_generator import HookGenerator
 
 
 class VideoGenerator:
@@ -21,6 +22,16 @@ class VideoGenerator:
         self.width = VIDEO_WIDTH
         self.height = VIDEO_HEIGHT
         self.fps = VIDEO_FPS
+        self.logo_path = DATA_DIR / "assets" / "logo.png"
+        self.hook_generator = HookGenerator()
+        self.hook_duration = 1.5  # Hook duration in seconds
+        self.cta_duration = 2.0   # CTA outro duration in seconds
+        self.cta_texts = [
+            "Follow untuk ayat harian 🤲",
+            "Like & Follow untuk lebih banyak 💫",
+            "Bagikan kebaikan ini ✨",
+            "Follow untuk inspirasi Quran 📖",
+        ]
         # Font paths for regular text
         self.font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -129,14 +140,24 @@ class VideoGenerator:
             # Resize and crop video to 9:16
             video = self._resize_to_portrait(video)
             
-            # Darken the background (reduce brightness to 50%)
-            video = video.fx(lambda clip: clip.fl_image(self._darken_frame))
+            # Generate hook text
+            hook_text = self.hook_generator.get_hook(text_translation, surah_name)
             
-            # Trim or loop video to match audio duration
-            if video.duration < audio_duration:
-                video = video.loop(duration=audio_duration)
+            # Create hook intro clip (before darkening main video)
+            hook_clip = self._create_hook_clip(hook_text, video)
+            
+            # Total duration needed: hook + audio + cta
+            total_duration = self.hook_duration + audio_duration + self.cta_duration
+            if video.duration < total_duration:
+                video = video.loop(duration=total_duration)
             else:
-                video = video.subclip(0, audio_duration)
+                video = video.subclip(0, total_duration)
+            
+            # Get main content portion (after hook, before CTA)
+            main_video = video.subclip(self.hook_duration, self.hook_duration + audio_duration)
+            
+            # Darken the main video background (reduce brightness to 50%)
+            main_video = main_video.fx(lambda clip: clip.fl_image(self._darken_frame))
             
             # Create text overlays using PIL (no ImageMagick)
             arab_img = self._create_text_image(text_arab, fontsize=48, color='white', arabic=True)
@@ -177,9 +198,23 @@ class VideoGenerator:
             ref_clip = ImageClip(ref_img).set_duration(audio_duration)
             ref_clip = ref_clip.set_position(('center', ref_y))
             
-            # Composite video
-            final = CompositeVideoClip([video, arab_clip, trans_clip, ref_clip])
-            final = final.set_audio(audio)
+            # Create list of clips for main content
+            main_clips = [main_video, arab_clip, trans_clip, ref_clip]
+            
+            # Add logo if exists
+            logo_clip = self._create_logo_clip(audio_duration, ref_y + ref_height + 20)
+            if logo_clip:
+                main_clips.append(logo_clip)
+            
+            # Composite main content
+            main_composite = CompositeVideoClip(main_clips)
+            main_composite = main_composite.set_audio(audio)
+            
+            # Create CTA outro clip
+            cta_clip = self._create_cta_clip(video)
+            
+            # Concatenate hook + main content + CTA
+            final = concatenate_videoclips([hook_clip, main_composite, cta_clip])
             
             # Write output
             final.write_videofile(
@@ -199,6 +234,9 @@ class VideoGenerator:
             video.close()
             audio.close()
             final.close()
+            hook_clip.close()
+            main_composite.close()
+            cta_clip.close()
             
             return {
                 "output_file": str(output_path),
@@ -210,6 +248,107 @@ class VideoGenerator:
         except Exception as e:
             raise Exception(f"Video generation failed: {str(e)}")
 
+    
+    def _create_cta_clip(self, bg_video: VideoFileClip) -> CompositeVideoClip:
+        """Create CTA outro clip (2 seconds)"""
+        import random
+        
+        # Pick random CTA text
+        cta_text = random.choice(self.cta_texts)
+        
+        # Create CTA text image
+        cta_img = self._create_text_image(cta_text, fontsize=44, color='#FFFFFF')
+        
+        # Get end portion of background video for CTA
+        start_time = max(0, bg_video.duration - self.cta_duration)
+        cta_bg = bg_video.subclip(start_time, bg_video.duration)
+        if cta_bg.duration < self.cta_duration:
+            cta_bg = cta_bg.loop(duration=self.cta_duration)
+        
+        # Darken CTA background (45% brightness)
+        cta_bg = cta_bg.fl_image(lambda frame: (frame * 0.45).astype(np.uint8))
+        
+        # Position CTA text in center
+        cta_text_clip = ImageClip(cta_img).set_duration(self.cta_duration)
+        cta_text_clip = cta_text_clip.set_position(('center', 'center'))
+        
+        # Add logo below CTA if exists
+        clips = [cta_bg, cta_text_clip]
+        
+        if self.logo_path.exists():
+            logo_clip = self._create_logo_clip(self.cta_duration, int(self.height * 0.65))
+            if logo_clip:
+                clips.append(logo_clip)
+        
+        # Composite CTA
+        cta_composite = CompositeVideoClip(clips)
+        
+        return cta_composite
+    
+    def _create_hook_clip(self, hook_text: str, bg_video: VideoFileClip) -> CompositeVideoClip:
+        """Create hook intro clip (1.5 seconds)"""
+        # Create hook text image with larger font
+        hook_img = self._create_text_image(hook_text, fontsize=56, color='#FFFFFF')
+        
+        # Get a portion of background video for hook
+        hook_bg = bg_video.subclip(0, min(self.hook_duration, bg_video.duration))
+        if hook_bg.duration < self.hook_duration:
+            hook_bg = hook_bg.loop(duration=self.hook_duration)
+        else:
+            hook_bg = hook_bg.subclip(0, self.hook_duration)
+        
+        # Darken hook background more (40% brightness)
+        hook_bg = hook_bg.fl_image(lambda frame: (frame * 0.4).astype(np.uint8))
+        
+        # Position hook text in center
+        hook_clip = ImageClip(hook_img).set_duration(self.hook_duration)
+        hook_clip = hook_clip.set_position(('center', 'center'))
+        
+        # Composite hook
+        hook_composite = CompositeVideoClip([hook_bg, hook_clip])
+        
+        return hook_composite
+    
+    def _create_logo_clip(self, duration: float, y_position: int) -> Optional[ImageClip]:
+        """Create logo clip with white color and transparent background"""
+        if not self.logo_path.exists():
+            print(f"Logo not found at {self.logo_path}")
+            return None
+        
+        try:
+            # Load logo
+            logo = Image.open(self.logo_path).convert('RGBA')
+            
+            # Resize logo to fit (max width 150px, maintain aspect ratio)
+            max_logo_width = 150
+            if logo.width > max_logo_width:
+                ratio = max_logo_width / logo.width
+                new_size = (max_logo_width, int(logo.height * ratio))
+                logo = logo.resize(new_size, Image.LANCZOS)
+            
+            # Convert to white (keep alpha channel)
+            logo_data = logo.getdata()
+            new_data = []
+            for item in logo_data:
+                # If pixel is not fully transparent, make it white
+                if item[3] > 0:
+                    new_data.append((255, 255, 255, item[3]))
+                else:
+                    new_data.append(item)
+            logo.putdata(new_data)
+            
+            # Convert to numpy array
+            logo_array = np.array(logo)
+            
+            # Create ImageClip
+            logo_clip = ImageClip(logo_array).set_duration(duration)
+            logo_clip = logo_clip.set_position(('center', y_position))
+            
+            return logo_clip
+            
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            return None
     
     def _darken_frame(self, frame: np.ndarray) -> np.ndarray:
         """Darken video frame by reducing brightness"""
