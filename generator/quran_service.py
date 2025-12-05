@@ -35,14 +35,13 @@ class QuranService:
             "minshawi": 4,     # Mohamed Siddiq El-Minshawi
         }
     
-    async def get_word_timestamps(self, surah: int, ayat: int, qari: str = "alafasy") -> list:
+    async def get_word_timestamps(self, surah: int, ayat: int, qari: str = "alafasy") -> dict:
         """
-        Fetch word-level timestamps from Quran.com API.
+        Fetch word-level timestamps and audio URL from Quran.com API.
         
-        Returns list of dicts with:
-        - text: Arabic word
-        - start: start time in ms
-        - end: end time in ms
+        Returns dict with:
+        - word_timings: list of timing dicts
+        - audio_url: URL to the audio file (for sync)
         """
         recitation_id = self.recitation_ids.get(qari, 7)
         
@@ -55,14 +54,24 @@ class QuranService:
             response = await self.client.get(url)
             
             if response.status_code != 200:
-                return []
+                return {"word_timings": [], "audio_url": None}
             
             data = response.json()
             
-            # Extract word timings
+            # Extract word timings and audio URL
             word_timings = []
+            audio_url = None
+            
             if "audio_files" in data and data["audio_files"]:
                 audio_file = data["audio_files"][0]
+                
+                # Get audio URL from Quran.com (this is synced with timestamps)
+                if "url" in audio_file:
+                    audio_url = audio_file["url"]
+                    # Quran.com uses relative URLs, prepend base
+                    if audio_url and not audio_url.startswith("http"):
+                        audio_url = f"https://verses.quran.com/{audio_url}"
+                
                 if "segments" in audio_file:
                     for segment in audio_file["segments"]:
                         # segment format: [word_position, start_ms, end_ms]
@@ -73,22 +82,28 @@ class QuranService:
                                 "end_ms": segment[2]
                             })
             
-            return word_timings
+            return {"word_timings": word_timings, "audio_url": audio_url}
             
         except Exception as e:
             print(f"Error fetching word timestamps: {e}")
-            return []
+            return {"word_timings": [], "audio_url": None}
     
     async def get_ayat_with_timestamps(self, surah: int, ayat: int, qari: str = "alafasy") -> Dict[str, Any]:
         """Fetch ayat data including text, audio, and word timestamps"""
         # Get basic ayat data
         ayat_data = await self.get_ayat(surah, ayat, qari)
         
-        # Get word timestamps
-        word_timings = await self.get_word_timestamps(surah, ayat, qari)
+        # Get word timestamps and synced audio from Quran.com
+        timestamp_data = await self.get_word_timestamps(surah, ayat, qari)
         
         # Add timestamps to response
-        ayat_data["word_timings"] = word_timings
+        ayat_data["word_timings"] = timestamp_data["word_timings"]
+        
+        # Use Quran.com audio if available (synced with timestamps)
+        # Otherwise fallback to alquran.cloud audio
+        if timestamp_data["audio_url"]:
+            ayat_data["audio_url"] = timestamp_data["audio_url"]
+            print(f"Using Quran.com synced audio: {timestamp_data['audio_url']}")
         
         return ayat_data
     
