@@ -112,7 +112,7 @@ GET  /api/stats                  # Statistik (total video, storage used, dll)
 - Fetch ayat random dari Al-Quran Cloud API
 - Download audio murotal
 - Select random background video
-- Overlay teks Arab dan terjemahan
+- Overlay teks Arab dan terjemahan dengan sinkronisasi audio
 - Render video final
 
 **Process Flow:**
@@ -120,6 +120,7 @@ GET  /api/stats                  # Statistik (total video, storage used, dll)
 sequenceDiagram
     participant API
     participant Generator
+    participant AudioSync
     participant QuranAPI
     participant Storage
     
@@ -127,11 +128,117 @@ sequenceDiagram
     Generator->>Generator: Pick random ayat (avoid duplicates)
     Generator->>QuranAPI: Fetch ayat text + translation
     Generator->>QuranAPI: Download audio murotal
+    Generator->>AudioSync: Analyze audio timing
+    AudioSync->>AudioSync: Detect segments & pauses
+    AudioSync->>Generator: Return timing data
     Generator->>Storage: Select random background video
-    Generator->>Generator: Create text overlay
-    Generator->>Generator: Combine video + audio + text
+    Generator->>Generator: Create synced text overlays
+    Generator->>Generator: Combine video + audio + synced text
     Generator->>Storage: Save final video
     Generator->>API: Return video metadata
+```
+
+### 3.1 Audio-Text Synchronization Service
+
+**Technology:** Python dengan librosa (audio analysis) dan pydub
+
+**Responsibilities:**
+- Analisis audio murotal untuk mendeteksi timing
+- Segmentasi teks berdasarkan jeda bacaan qari
+- Generate timing data untuk text overlay
+- Sinkronisasi animasi teks dengan audio
+
+**Synchronization Strategy:**
+
+Ada 2 pendekatan untuk sinkronisasi:
+
+**Approach 1: Proportional Timing (Simple)**
+- Bagi durasi audio secara proporsional berdasarkan panjang teks
+- Cocok untuk ayat pendek-menengah
+- Tidak memerlukan analisis audio kompleks
+
+**Approach 2: Audio Analysis (Advanced)**
+- Gunakan librosa untuk mendeteksi silence/pause dalam audio
+- Segmentasi teks berdasarkan pause points
+- Lebih akurat untuk ayat panjang dengan jeda natural
+
+**Timing Calculation:**
+```python
+def calculate_text_timing(audio_duration: float, text_arab: str, text_translation: str) -> TextTiming:
+    """
+    Calculate timing for text display synchronized with audio.
+    
+    Strategy:
+    1. Arabic text appears at start, fades in over 0.5s
+    2. Arabic text stays visible during audio playback
+    3. Translation appears after ~70% of audio duration
+    4. Both texts fade out together at end
+    """
+    arab_start = 0.0
+    arab_fade_in = 0.5
+    translation_start = audio_duration * 0.7
+    translation_fade_in = 0.5
+    fade_out_start = audio_duration - 0.5
+    
+    return TextTiming(
+        arab_start=arab_start,
+        arab_fade_in=arab_fade_in,
+        translation_start=translation_start,
+        translation_fade_in=translation_fade_in,
+        fade_out_start=fade_out_start,
+        total_duration=audio_duration
+    )
+```
+
+**Segment Detection (untuk ayat panjang):**
+```python
+def detect_audio_segments(audio_path: str, min_silence_duration: float = 0.3) -> List[AudioSegment]:
+    """
+    Detect natural pauses in qari recitation using audio analysis.
+    
+    Returns list of segments with start/end timestamps.
+    """
+    # Load audio
+    y, sr = librosa.load(audio_path)
+    
+    # Detect non-silent intervals
+    intervals = librosa.effects.split(y, top_db=30)
+    
+    segments = []
+    for start_sample, end_sample in intervals:
+        start_time = start_sample / sr
+        end_time = end_sample / sr
+        segments.append(AudioSegment(start=start_time, end=end_time))
+    
+    return segments
+```
+
+**Text Animation Types:**
+- `fade_in`: Teks muncul dengan opacity 0→1
+- `fade_out`: Teks menghilang dengan opacity 1→0
+- `slide_up`: Teks muncul dari bawah (untuk terjemahan)
+- `highlight`: Word-by-word highlight (advanced, optional)
+
+**Process Flow untuk Sinkronisasi:**
+```mermaid
+sequenceDiagram
+    participant Generator
+    participant AudioSync
+    participant TextRenderer
+    
+    Generator->>AudioSync: analyze_audio(audio_file)
+    AudioSync->>AudioSync: Load audio dengan librosa
+    AudioSync->>AudioSync: Detect silence intervals
+    AudioSync->>AudioSync: Calculate segment boundaries
+    AudioSync-->>Generator: Return AudioTimingData
+    
+    Generator->>Generator: Split text into segments (if needed)
+    Generator->>TextRenderer: Create text clips with timing
+    TextRenderer->>TextRenderer: Apply fade animations
+    TextRenderer->>TextRenderer: Position text on frame
+    TextRenderer-->>Generator: Return animated text clips
+    
+    Generator->>Generator: Composite: background + text + audio
 ```
 
 ### 4. Task Scheduler
@@ -323,6 +430,35 @@ class GenerateJob:
     finished_at: datetime
 ```
 
+### TextTiming Model
+```python
+class TextTiming:
+    arab_start: float        # Waktu mulai tampil teks Arab (detik)
+    arab_fade_in: float      # Durasi fade-in teks Arab (detik)
+    translation_start: float # Waktu mulai tampil terjemahan (detik)
+    translation_fade_in: float # Durasi fade-in terjemahan (detik)
+    fade_out_start: float    # Waktu mulai fade-out semua teks (detik)
+    total_duration: float    # Total durasi video (detik)
+```
+
+### AudioSegment Model
+```python
+class AudioSegment:
+    start: float             # Waktu mulai segment (detik)
+    end: float               # Waktu akhir segment (detik)
+    text_arab: str           # Potongan teks Arab untuk segment ini
+    text_translation: str    # Potongan terjemahan untuk segment ini (optional)
+```
+
+### AudioTimingData Model
+```python
+class AudioTimingData:
+    total_duration: float    # Total durasi audio (detik)
+    segments: List[AudioSegment]  # List segment dengan timing
+    silence_intervals: List[Tuple[float, float]]  # Interval jeda/silence
+    text_timing: TextTiming  # Calculated timing untuk text overlay
+```
+
 ## Error Handling
 
 ### API Errors
@@ -477,3 +613,23 @@ PLAYWRIGHT_BROWSERS_PATH=/app/browsers  # Playwright browser path
 ### Property 18: AI Caption Content Validity
 *For any* AI-generated caption, the output SHALL contain the surah name, ayat number, and relevant Islamic hashtags.
 **Validates: Requirements 6.3**
+
+### Property 19: Audio-Text Synchronization
+*For any* generated video, the Arabic text SHALL appear synchronized with the start of audio playback (within 0.5 second tolerance).
+**Validates: Requirements 8.1**
+
+### Property 20: Translation Timing Sequence
+*For any* generated video, the Indonesian translation SHALL appear after the Arabic text has been displayed (translation_start >= arab_start).
+**Validates: Requirements 8.2**
+
+### Property 21: Text Duration Alignment
+*For any* generated video, the total text display duration SHALL match the audio duration (text ends when audio ends, within 1 second tolerance).
+**Validates: Requirements 8.5**
+
+### Property 22: Smooth Text Animation
+*For any* text transition in the video, the fade animation duration SHALL be between 0.3 and 1.0 seconds for smooth visual experience.
+**Validates: Requirements 8.4**
+
+### Property 23: Segment Timing Validity
+*For any* audio segment detected, the segment end time SHALL be greater than segment start time, and segments SHALL not overlap.
+**Validates: Requirements 8.3**

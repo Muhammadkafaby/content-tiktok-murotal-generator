@@ -53,8 +53,8 @@ async def generate_video_task(job_id: str, count: int):
                 surah, ayat = quran_service.get_random_ayat_reference(used_ayat)
                 used_ayat.add((surah, ayat))
                 
-                # Fetch ayat data
-                ayat_data = await quran_service.get_ayat(surah, ayat, settings.qari)
+                # Fetch ayat data with word timestamps for sync
+                ayat_data = await quran_service.get_ayat_with_timestamps(surah, ayat, settings.qari)
                 
                 # Get background (download from Pexels if none available)
                 background = await bg_manager.get_or_download_background()
@@ -66,14 +66,15 @@ async def generate_video_task(job_id: str, count: int):
                 audio_path = tempfile.mktemp(suffix=".mp3")
                 await quran_service.download_audio(ayat_data["audio_url"], audio_path)
                 
-                # Generate video
+                # Generate video with word-level sync
                 result = await video_generator.generate_video(
                     background_path=background,
                     audio_path=audio_path,
                     text_arab=ayat_data["text_arab"],
                     text_translation=ayat_data["text_translation"],
                     surah_name=ayat_data["surah_name"],
-                    ayat_number=ayat
+                    ayat_number=ayat,
+                    word_timings=ayat_data.get("word_timings", [])
                 )
                 
                 # Save to database

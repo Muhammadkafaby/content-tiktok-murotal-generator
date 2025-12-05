@@ -15,6 +15,12 @@ moviepy==1.0.3
 Pillow==10.2.0
 ffmpeg-python==0.2.0
 
+# Audio analysis for text synchronization
+librosa==0.10.1
+pydub==0.25.1
+soundfile==0.12.1
+numpy>=1.23.0
+
 # Scheduler
 APScheduler==3.10.4
 

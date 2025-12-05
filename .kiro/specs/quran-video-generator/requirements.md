@@ -91,3 +91,16 @@ Sistem auto-generate video quotes Al-Quran untuk konten TikTok. Sistem akan seca
 3. WHEN AI generate caption THEN sistem SHALL menambahkan emoji dan hashtag yang relevan
 4. WHEN OpenAI API tidak tersedia THEN sistem SHALL fallback ke mode template statis
 5. WHEN user memilih mode template THEN sistem SHALL menggunakan format caption sederhana tanpa AI
+
+
+### Requirement 8
+
+**User Story:** Sebagai content creator, saya ingin teks Arab dan terjemahan muncul sinkron mengikuti audio murottal, sehingga penonton dapat membaca ayat bersamaan dengan bacaan qari.
+
+#### Acceptance Criteria
+
+1. WHEN video di-generate THEN sistem SHALL menampilkan teks Arab yang sinkron dengan timing audio murottal
+2. WHEN audio murottal diputar THEN sistem SHALL menampilkan terjemahan Indonesia yang muncul setelah teks Arab selesai dibacakan
+3. WHEN ayat memiliki multiple segments THEN sistem SHALL membagi teks menjadi bagian-bagian yang sesuai dengan jeda bacaan qari
+4. WHEN teks ditampilkan THEN sistem SHALL menggunakan animasi fade-in/fade-out yang smooth untuk transisi antar segment
+5. WHEN audio murottal memiliki durasi tertentu THEN sistem SHALL menyesuaikan timing tampilan teks agar selesai bersamaan dengan audio

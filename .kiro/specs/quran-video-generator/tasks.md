@@ -95,199 +95,220 @@
     - **Property 7: Translation Inclusion**
     - **Validates: Requirements 1.4, 3.3, 3.5**
 
-- [x] 5. Checkpoint - Ensure core video generation works
+- [x] 5. Implement Audio-Text Synchronization
+
+  - [x] 5.1 Add librosa dan pydub dependencies
+    - Add librosa untuk audio analysis
+    - Add pydub untuk audio manipulation
+    - _Requirements: 8.1_
+
+  - [x] 5.2 Create AudioSyncService untuk timing calculation
+    - Implement calculate_text_timing() untuk proportional timing
+    - Calculate arab_start, translation_start, fade timings
+    - Ensure text duration matches audio duration
+    - _Requirements: 8.1, 8.2, 8.5_
+
+  - [x] 5.3 Implement audio segment detection
+    - Use librosa to detect silence intervals
+    - Split text into segments based on audio pauses
+    - Handle ayat panjang dengan multiple segments
+    - _Requirements: 8.3_
+
+  - [x] 5.4 Implement text animation with fade effects
+    - Create fade-in animation untuk teks Arab
+    - Create fade-in animation untuk terjemahan
+    - Create fade-out animation untuk semua teks
+    - Ensure smooth transitions (0.3-1.0 second duration)
+    - _Requirements: 8.4_
+
+  - [x] 5.5 Integrate sync service dengan video generator
+    - Modify video_generator.py untuk use AudioSyncService
+    - Apply timing data ke text overlays
+    - Ensure teks muncul sinkron dengan audio
+    - _Requirements: 8.1, 8.2, 8.5_
+
+  - [x] 5.6 Write property tests for audio sync
+
+
+
+    - **Property 19: Audio-Text Synchronization**
+    - **Property 20: Translation Timing Sequence**
+    - **Property 21: Text Duration Alignment**
+    - **Property 22: Smooth Text Animation**
+    - **Property 23: Segment Timing Validity**
+    - **Validates: Requirements 8.1, 8.2, 8.3, 8.4, 8.5**
+
+- [x] 6. Checkpoint - Ensure core video generation with sync works
+
+
 
   - Ensure all tests pass, ask the user if questions arise.
 
-- [x] 6. Implement REST API endpoints
+- [x] 7. Implement REST API endpoints
 
-  - [x] 6.1 Create video endpoints
-
-
+  - [x] 7.1 Create video endpoints
     - GET /api/videos - list dengan pagination
     - GET /api/videos/{id} - detail
     - GET /api/videos/{id}/download - download file
     - DELETE /api/videos/{id} - delete
     - _Requirements: 2.1, 2.3_
 
-  - [ ] 6.2 Create generate endpoints
+  - [ ] 7.2 Create generate endpoints
     - POST /api/generate - trigger generate
     - GET /api/generate/status - check status
     - POST /api/generate/cancel - cancel job
-
     - _Requirements: 2.2, 2.4, 2.5_
-  - [ ] 6.3 Create settings endpoints
-    - GET /api/settings
 
+  - [ ] 7.3 Create settings endpoints
+    - GET /api/settings
     - PUT /api/settings
     - _Requirements: 3.1, 3.2_
 
-
-  - [ ] 6.4 Create stats endpoint
+  - [ ] 7.4 Create stats endpoint
     - GET /api/stats - total videos, storage used, dll
-
     - _Requirements: 5.4_
 
-  - [ ] 6.5 Write property tests for API
+  - [ ] 7.5 Write property tests for API
     - **Property 4: Batch Uniqueness**
     - **Property 8: Progress Accuracy**
-
-
     - **Validates: Requirements 1.5, 2.5**
 
-
-- [ ] 7. Implement Task Scheduler
-  - [ ] 7.1 Setup APScheduler dengan SQLite job store
+- [ ] 8. Implement Task Scheduler
+  - [ ] 8.1 Setup APScheduler dengan SQLite job store
     - Configure persistent job storage
-
     - Setup cron-based scheduling
-
     - _Requirements: 5.1_
-  - [ ] 7.2 Implement scheduled video generation
-    - Auto-generate berdasarkan schedule
 
+  - [ ] 8.2 Implement scheduled video generation
+    - Auto-generate berdasarkan schedule
     - Record history di database
     - _Requirements: 5.1, 5.3_
-  - [ ] 7.3 Write property tests for scheduler
-    - **Property 11: Scheduler Execution**
 
+  - [ ] 8.3 Write property tests for scheduler
+    - **Property 11: Scheduler Execution**
     - **Property 12: Generation History Tracking**
     - **Validates: Requirements 5.1, 5.3**
 
-- [ ] 8. Implement TikTok Auto-Posting service
-  - [x] 8.1 Setup Playwright untuk headless browser
-
+- [ ] 9. Implement TikTok Auto-Posting service
+  - [x] 9.1 Setup Playwright untuk headless browser
     - Install browser dependencies
     - Configure browser launch options
     - _Requirements: 6.1_
 
-
-  - [ ] 8.2 Implement TikTok login dan session management
+  - [ ] 9.2 Implement TikTok login dan session management
     - Login flow dengan QR code atau manual
     - Save dan load session cookies
-
     - Session validation
-
     - _Requirements: 6.1, 6.6_
-  - [ ] 8.3 Implement video upload automation
-    - Navigate ke upload page
 
+  - [ ] 9.3 Implement video upload automation
+    - Navigate ke upload page
     - Upload video file
     - Fill caption dan hashtags
     - Click post button
     - _Requirements: 6.2, 6.3_
 
-
-  - [ ] 8.4 Implement posting status tracking
+  - [ ] 9.4 Implement posting status tracking
     - Record success/failed status
-
     - Retry logic untuk failed posts
     - _Requirements: 6.4, 6.5_
 
-  - [x] 8.5 Write property tests for TikTok service
-
-
+  - [x] 9.5 Write property tests for TikTok service
     - **Property 14: TikTok Session Persistence**
     - **Property 15: TikTok Upload Completion**
     - **Property 17: Post Status Tracking**
-
     - **Validates: Requirements 6.1, 6.2, 6.4, 6.5**
 
-- [ ] 9. Implement AI Caption Generator
-  - [ ] 9.1 Create OpenAI integration service
+- [ ] 10. Implement AI Caption Generator
+  - [ ] 10.1 Create OpenAI integration service
     - Setup OpenAI API client
-
     - Create prompt template untuk caption generation
     - _Requirements: 7.1_
-  - [ ] 9.2 Implement caption generation logic
+
+  - [ ] 10.2 Implement caption generation logic
     - AI mode: generate engaging caption dengan hikmah
     - Template mode: simple format caption
-
     - Fallback mechanism jika AI fails
     - _Requirements: 7.2, 7.3, 7.4, 7.5_
-  - [ ] 9.3 Write property tests for caption generator
+
+  - [ ] 10.3 Write property tests for caption generator
     - **Property 16: Caption Generation**
     - **Property 18: AI Caption Content Validity**
     - **Validates: Requirements 6.3, 7.2**
 
-
-- [ ] 10. Checkpoint - Ensure backend services work
+- [ ] 11. Checkpoint - Ensure backend services work
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 11. Implement Frontend (React/Vite)
-  - [x] 11.1 Setup React project dengan Vite
-
-
-
-
+- [ ] 12. Implement Frontend (React/Vite)
+  - [x] 12.1 Setup React project dengan Vite
     - Install dependencies (React, TailwindCSS, axios)
     - Configure routing
     - _Requirements: 2.1_
 
-  - [ ] 11.2 Create Dashboard page
+  - [ ] 12.2 Create Dashboard page
     - Display list of generated videos
     - Show statistics (total videos, storage)
     - Show recent activity
-
     - _Requirements: 2.1, 5.3_
 
-  - [x] 11.3 Create Generate page
-
-
+  - [x] 12.3 Create Generate page
     - Generate button untuk single video
     - Batch generate dengan input jumlah
     - Progress indicator
-
     - _Requirements: 2.2, 2.4, 2.5_
-  - [ ] 11.4 Create Videos gallery page
+
+  - [ ] 12.4 Create Videos gallery page
     - Grid view of all videos
     - Video preview player
     - Download button
-
     - Delete button
-
-
     - _Requirements: 2.3_
-  - [ ] 11.5 Create Settings page
+
+  - [ ] 12.5 Create Settings page
     - Qari selection dropdown
     - Scheduler configuration
     - TikTok account setup
     - Caption mode selection (AI/Template)
     - _Requirements: 3.1, 5.2, 6.6, 7.1_
-  - [ ] 11.6 Create TikTok integration page
+
+  - [ ] 12.6 Create TikTok integration page
     - Login status display
     - Manual post button
     - Posting history
     - _Requirements: 6.4, 6.6_
 
-- [ ] 12. Implement Error Handling dan Logging
-  - [ ] 12.1 Setup logging system
+- [ ] 13. Implement Error Handling dan Logging
+  - [ ] 13.1 Setup logging system
     - Configure Python logging
     - Log to file dan console
     - _Requirements: 4.5_
-  - [ ] 12.2 Implement storage monitoring
+
+  - [ ] 13.2 Implement storage monitoring
     - Check disk space before generate
     - Alert when storage < 1GB
     - _Requirements: 5.4_
-  - [ ] 12.3 Write property tests for error handling
+
+  - [ ] 13.3 Write property tests for error handling
     - **Property 10: Error Logging**
     - **Property 13: Storage Alert Threshold**
     - **Validates: Requirements 4.5, 5.4**
 
-- [ ] 13. Final integration dan Docker build
-  - [ ] 13.1 Build frontend dan integrate dengan backend
+- [ ] 14. Final integration dan Docker build
+  - [ ] 14.1 Build frontend dan integrate dengan backend
     - Build React app
     - Serve static files dari FastAPI
     - _Requirements: 4.1_
-  - [ ] 13.2 Test Docker container locally
+
+  - [ ] 14.2 Test Docker container locally
     - Build image
     - Run dengan docker-compose
     - Verify all features work
     - _Requirements: 4.1, 4.2_
-  - [ ] 13.3 Add sample background videos
+
+  - [ ] 14.3 Add sample background videos
     - Download beberapa video pemandangan dari Pexels
     - Add ke backgrounds volume
     - _Requirements: 3.3_
 
-- [ ] 14. Final Checkpoint - Ensure all tests pass
+- [ ] 15. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.

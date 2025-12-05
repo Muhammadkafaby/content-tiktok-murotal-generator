@@ -24,6 +24,73 @@ TOTAL_AYAT = sum(AYAT_PER_SURAH)  # 6236
 class QuranService:
     def __init__(self):
         self.client = httpx.AsyncClient(timeout=30.0)
+        # Quran.com API for word timestamps
+        self.quran_com_api = "https://api.quran.com/api/v4"
+        # Recitation IDs for different qaris on Quran.com
+        self.recitation_ids = {
+            "alafasy": 7,      # Mishary Rashid Alafasy
+            "abdulbasit": 1,   # Abdul Basit (Murattal)
+            "sudais": 6,       # Abdurrahman As-Sudais
+            "husary": 5,       # Mahmoud Khalil Al-Husary
+            "minshawi": 4,     # Mohamed Siddiq El-Minshawi
+        }
+    
+    async def get_word_timestamps(self, surah: int, ayat: int, qari: str = "alafasy") -> list:
+        """
+        Fetch word-level timestamps from Quran.com API.
+        
+        Returns list of dicts with:
+        - text: Arabic word
+        - start: start time in ms
+        - end: end time in ms
+        """
+        recitation_id = self.recitation_ids.get(qari, 7)
+        
+        try:
+            # Get verse key (e.g., "2:255" for Ayatul Kursi)
+            verse_key = f"{surah}:{ayat}"
+            
+            # Fetch timestamps from Quran.com
+            url = f"{self.quran_com_api}/recitations/{recitation_id}/by_ayah/{verse_key}"
+            response = await self.client.get(url)
+            
+            if response.status_code != 200:
+                return []
+            
+            data = response.json()
+            
+            # Extract word timings
+            word_timings = []
+            if "audio_files" in data and data["audio_files"]:
+                audio_file = data["audio_files"][0]
+                if "segments" in audio_file:
+                    for segment in audio_file["segments"]:
+                        # segment format: [word_position, start_ms, end_ms]
+                        if len(segment) >= 3:
+                            word_timings.append({
+                                "position": segment[0],
+                                "start_ms": segment[1],
+                                "end_ms": segment[2]
+                            })
+            
+            return word_timings
+            
+        except Exception as e:
+            print(f"Error fetching word timestamps: {e}")
+            return []
+    
+    async def get_ayat_with_timestamps(self, surah: int, ayat: int, qari: str = "alafasy") -> Dict[str, Any]:
+        """Fetch ayat data including text, audio, and word timestamps"""
+        # Get basic ayat data
+        ayat_data = await self.get_ayat(surah, ayat, qari)
+        
+        # Get word timestamps
+        word_timings = await self.get_word_timestamps(surah, ayat, qari)
+        
+        # Add timestamps to response
+        ayat_data["word_timings"] = word_timings
+        
+        return ayat_data
     
     async def get_ayat(self, surah: int, ayat: int, qari: str = "alafasy") -> Dict[str, Any]:
         """Fetch ayat data including text and audio"""
