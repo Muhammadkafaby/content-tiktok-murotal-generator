@@ -4,16 +4,17 @@ import tempfile
 import numpy as np
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
+from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+from hijri_converter import Hijri, Gregorian
 
 # Fix for Pillow 10+ compatibility with moviepy
 import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, vfx
 from api.config import VIDEOS_DIR, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS, DATA_DIR
-from generator.hook_generator import HookGenerator
 
 
 class VideoGenerator:
@@ -23,18 +24,21 @@ class VideoGenerator:
         self.height = VIDEO_HEIGHT
         self.fps = VIDEO_FPS
         self.logo_path = DATA_DIR / "assets" / "logo.png"
-        self.hook_generator = HookGenerator()
-        self.hook_duration = 1.5  # Hook duration in seconds
-        self.cta_duration = 2.0   # CTA outro duration in seconds
-        self.cta_texts = [
-            "Ikuti untuk ayat lainnya.",
-            "Bagikan ayat ini sebagai kebaikan.",
-            "Sebarkan kebaikan, ikuti kami.",
-            "Simpan dan bagikan ayat ini.",
-        ]
-        self.ai_api_url = "https://api.elrayyxml.web.id/api/ai/chatgpt"
+        self.min_video_duration = 10.0  # Minimum total video duration in seconds
         self.watermark_text = "@ruang.ayat"
-        self.watermark_opacity = 0.35  # 35% opacity
+        self.watermark_opacity = 0.4  # 40% opacity for better visibility
+        self.fade_duration = 0.8  # Fade in/out duration in seconds
+        self.bg_darken = 0.55  # Background darken level (55% brightness)
+        # Indonesian day names
+        self.day_names_id = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Ahad']
+        self.day_names_en = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        # Indonesian month names
+        self.month_names_id = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+                               'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        # Hijri month names
+        self.hijri_months = ['Muharram', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 
+                            'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban',
+                            'Ramadhan', 'Syawal', 'Dzulqaidah', 'Dzulhijjah']
         # Font paths for regular text
         self.font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -92,6 +96,246 @@ class VideoGenerator:
         draw.multiline_text((20, 20), wrapped_text, font=font, fill=color, align='center')
         
         return np.array(img)
+    
+    def _create_aesthetic_text(
+        self,
+        text: str,
+        fontsize: int,
+        color: str = 'white',
+        max_width: int = None,
+        arabic: bool = False,
+        italic_style: bool = False
+    ) -> np.ndarray:
+        """Create aesthetic text with soft shadow for wallpaper-style look"""
+        if max_width is None:
+            max_width = self.width - 80  # More padding for aesthetic
+        
+        font = self._get_font(fontsize, arabic=arabic)
+        
+        # Wrap text
+        wrapped_text = self._wrap_text_pil(text, font, max_width)
+        
+        # Calculate image size
+        dummy_img = Image.new('RGBA', (1, 1))
+        draw = ImageDraw.Draw(dummy_img)
+        bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
+        text_width = bbox[2] - bbox[0] + 60
+        text_height = bbox[3] - bbox[1] + 50
+        
+        # Create image with transparent background
+        img = Image.new('RGBA', (text_width, text_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Draw soft shadow (multiple layers for blur effect)
+        shadow_color = (0, 0, 0, 60)
+        for offset in [(3, 3), (2, 2), (4, 4)]:
+            draw.multiline_text((30 + offset[0], 25 + offset[1]), wrapped_text, 
+                               font=font, fill=shadow_color, align='center')
+        
+        # Draw main text
+        draw.multiline_text((30, 25), wrapped_text, font=font, fill=color, align='center')
+        
+        return np.array(img)
+    
+    def _get_calendar_info(self) -> Dict[str, str]:
+        """Get current date info in Masehi and Hijriah"""
+        now = datetime.now()
+        
+        # Day name
+        day_idx = now.weekday()
+        day_id = self.day_names_id[day_idx]
+        day_en = self.day_names_en[day_idx]
+        
+        # Masehi date
+        masehi_day = now.day
+        masehi_month = self.month_names_id[now.month - 1]
+        masehi_year = now.year
+        
+        # Hijriah date
+        hijri = Gregorian(now.year, now.month, now.day).to_hijri()
+        hijri_day = hijri.day
+        hijri_month = self.hijri_months[hijri.month - 1]
+        hijri_year = hijri.year
+        
+        return {
+            'day_id': day_id,
+            'day_en': day_en,
+            'masehi_day': masehi_day,
+            'masehi_month': masehi_month,
+            'masehi_year': masehi_year,
+            'hijri_day': hijri_day,
+            'hijri_month': hijri_month,
+            'hijri_year': hijri_year
+        }
+    
+    def _create_status_bar(self) -> np.ndarray:
+        """Create iPhone-style status bar with signal, 5G, battery (right side only)"""
+        bar_width = self.width
+        bar_height = 44
+        img = Image.new('RGBA', (bar_width, bar_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        font_5g = self._get_font(14)
+        
+        # Right side only - Signal bars, 5G, Battery
+        right_x = bar_width - 30
+        y_center = 18
+        
+        # Battery icon (outline rectangle with fill)
+        bat_width, bat_height = 24, 12
+        bat_x = right_x - bat_width
+        draw.rounded_rectangle(
+            [(bat_x, y_center), (bat_x + bat_width, y_center + bat_height)],
+            radius=2, outline=(255, 255, 255, 255), width=1
+        )
+        # Battery cap
+        draw.rectangle([(bat_x + bat_width, y_center + 3), (bat_x + bat_width + 2, y_center + 9)], 
+                      fill=(255, 255, 255, 255))
+        # Battery fill (full)
+        draw.rectangle([(bat_x + 2, y_center + 2), (bat_x + bat_width - 2, y_center + bat_height - 2)], 
+                      fill=(255, 255, 255, 255))
+        
+        # 5G text
+        draw.text((bat_x - 30, y_center - 2), "5G", font=font_5g, fill=(255, 255, 255, 255))
+        
+        # Signal bars (4 bars increasing height)
+        signal_x = bat_x - 70
+        bar_gap = 3
+        for i, h in enumerate([5, 8, 11, 14]):
+            bx = signal_x + i * (3 + bar_gap)
+            by = y_center + 14 - h
+            draw.rounded_rectangle([(bx, by), (bx + 3, y_center + 14)], radius=1, fill=(255, 255, 255, 255))
+        
+        return np.array(img)
+    
+    def _create_lock_icon(self) -> np.ndarray:
+        """Create lock icon for lock screen"""
+        icon_size = 50
+        img = Image.new('RGBA', (icon_size, icon_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Draw lock icon using shapes
+        # Lock body (rounded rectangle)
+        draw.rounded_rectangle([(10, 22), (40, 45)], radius=5, fill=(255, 255, 255, 200))
+        # Lock shackle (arc)
+        draw.arc([(15, 8), (35, 28)], start=180, end=0, fill=(255, 255, 255, 200), width=4)
+        # Keyhole
+        draw.ellipse([(22, 28), (28, 34)], fill=(0, 0, 0, 150))
+        draw.rectangle([(24, 32), (26, 40)], fill=(0, 0, 0, 150))
+        
+        return np.array(img)
+    
+    def _create_bottom_bar(self) -> np.ndarray:
+        """Create iPhone-style bottom bar with flashlight and camera icons"""
+        bar_width = self.width
+        bar_height = 120
+        img = Image.new('RGBA', (bar_width, bar_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        font_hint = self._get_font(16)
+        
+        # Button settings
+        button_size = 50
+        button_y = 10
+        
+        # Left button (flashlight) - dark rounded square
+        left_x = 35
+        draw.rounded_rectangle(
+            [(left_x, button_y), (left_x + button_size, button_y + button_size)],
+            radius=14,
+            fill=(50, 50, 50, 200)
+        )
+        # Flashlight icon - simple torch shape
+        cx, cy = left_x + button_size // 2, button_y + button_size // 2
+        # Torch head (trapezoid-ish)
+        draw.polygon([(cx - 6, cy - 12), (cx + 6, cy - 12), (cx + 4, cy + 2), (cx - 4, cy + 2)], 
+                     fill=(255, 255, 255, 230))
+        # Torch handle
+        draw.rectangle([(cx - 3, cy + 2), (cx + 3, cy + 14)], fill=(255, 255, 255, 230))
+        
+        # Right button (camera) - dark rounded square
+        right_x = bar_width - 35 - button_size
+        draw.rounded_rectangle(
+            [(right_x, button_y), (right_x + button_size, button_y + button_size)],
+            radius=14,
+            fill=(50, 50, 50, 200)
+        )
+        # Camera icon - body and lens
+        cx, cy = right_x + button_size // 2, button_y + button_size // 2
+        # Camera body
+        draw.rounded_rectangle(
+            [(cx - 14, cy - 6), (cx + 14, cy + 10)],
+            radius=3,
+            outline=(255, 255, 255, 230),
+            width=2
+        )
+        # Camera lens (circle)
+        draw.ellipse([(cx - 6, cy - 4), (cx + 6, cy + 8)], outline=(255, 255, 255, 230), width=2)
+        # Camera viewfinder bump
+        draw.rectangle([(cx - 4, cy - 10), (cx + 4, cy - 6)], fill=(255, 255, 255, 230))
+        
+        # Center hint text
+        hint_text = "Swipe up to open"
+        hint_bbox = draw.textbbox((0, 0), hint_text, font=font_hint)
+        hint_width = hint_bbox[2] - hint_bbox[0]
+        draw.text((bar_width // 2 - hint_width // 2, button_y + 60), hint_text, 
+                 font=font_hint, fill=(255, 255, 255, 120))
+        
+        # Bottom home indicator line (thicker, more visible)
+        line_width = 134
+        line_height = 5
+        line_x = (bar_width - line_width) // 2
+        draw.rounded_rectangle(
+            [(line_x, button_y + 95), (line_x + line_width, button_y + 95 + line_height)],
+            radius=3,
+            fill=(255, 255, 255, 200)
+        )
+        
+        return np.array(img)
+    
+    def _create_calendar_overlay(self) -> np.ndarray:
+        """Create calendar overlay - Hari, Tanggal Masehi, Tanggal Hijriah"""
+        cal = self._get_calendar_info()
+        
+        # Create canvas
+        cal_width = self.width
+        cal_height = 140
+        img = Image.new('RGBA', (cal_width, cal_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Fonts
+        font_day = self._get_font(32)        # Hari (Jumat)
+        font_masehi = self._get_font(24)     # Tanggal Masehi
+        font_hijri = self._get_font(20)      # Tanggal Hijriah
+        
+        # Helper function to draw text with soft shadow
+        def draw_text_shadow(pos, text, font, color=(255, 255, 255, 255)):
+            x, y = pos
+            shadow_color = (0, 0, 0, 60)
+            draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+            draw.text((x, y), text, font=font, fill=color)
+        
+        center_x = cal_width // 2
+        
+        # Line 1: Hari (Jumat)
+        day_text = cal['day_id']
+        day_bbox = draw.textbbox((0, 0), day_text, font=font_day)
+        day_width = day_bbox[2] - day_bbox[0]
+        draw_text_shadow((center_x - day_width // 2, 10), day_text, font_day)
+        
+        # Line 2: Tanggal Masehi (5 Desember 2025)
+        masehi_text = f"{cal['masehi_day']} {cal['masehi_month']} {cal['masehi_year']}"
+        masehi_bbox = draw.textbbox((0, 0), masehi_text, font=font_masehi)
+        masehi_width = masehi_bbox[2] - masehi_bbox[0]
+        draw_text_shadow((center_x - masehi_width // 2, 50), masehi_text, font_masehi)
+        
+        # Line 3: Tanggal Hijriah (5 Jumadil Akhir 1447 H)
+        hijri_text = f"{cal['hijri_day']} {cal['hijri_month']} {cal['hijri_year']} H"
+        hijri_bbox = draw.textbbox((0, 0), hijri_text, font=font_hijri)
+        hijri_width = hijri_bbox[2] - hijri_bbox[0]
+        draw_text_shadow((center_x - hijri_width // 2, 90), hijri_text, font_hijri, (200, 200, 200, 255))
+        
+        return np.array(img)
 
     
     def _wrap_text_pil(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
@@ -127,7 +371,7 @@ class VideoGenerator:
         surah_name: str,
         ayat_number: int
     ) -> Dict[str, Any]:
-        """Generate video with background, audio, and text overlay"""
+        """Generate aesthetic wallpaper-style video with background and text overlay"""
         
         output_filename = f"quran_{surah_name}_{ayat_number}_{uuid.uuid4().hex[:8]}.mp4"
         output_path = self.output_dir / output_filename
@@ -140,84 +384,101 @@ class VideoGenerator:
             audio = AudioFileClip(audio_path)
             audio_duration = audio.duration
             
+            # Calculate video duration (minimum 10 seconds or audio length)
+            video_duration = max(audio_duration, self.min_video_duration)
+            
             # Resize and crop video to 9:16
             video = self._resize_to_portrait(video)
             
-            # Generate hook text
-            hook_text = self.hook_generator.get_hook(text_translation, surah_name)
-            
-            # Create hook intro clip (before darkening main video)
-            hook_clip = self._create_hook_clip(hook_text, video)
-            
-            # Total duration needed: hook + audio + cta
-            total_duration = self.hook_duration + audio_duration + self.cta_duration
-            if video.duration < total_duration:
-                video = video.loop(duration=total_duration)
+            # Loop or trim video to match duration
+            if video.duration < video_duration:
+                video = video.loop(duration=video_duration)
             else:
-                video = video.subclip(0, total_duration)
+                video = video.subclip(0, video_duration)
             
-            # Get main content portion (after hook, before CTA)
-            main_video = video.subclip(self.hook_duration, self.hook_duration + audio_duration)
+            # Darken the background slightly for text readability
+            video = video.fl_image(self._darken_frame)
             
-            # Darken the main video background (reduce brightness to 50%)
-            main_video = main_video.fx(lambda clip: clip.fl_image(self._darken_frame))
+            # Create iPhone lock screen elements
+            status_bar_img = self._create_status_bar()
+            calendar_img = self._create_calendar_overlay()
+            bottom_bar_img = self._create_bottom_bar()
             
-            # Create text overlays using PIL (no ImageMagick)
-            arab_img = self._create_text_image(text_arab, fontsize=48, color='white', arabic=True)
-            trans_img = self._create_text_image(text_translation, fontsize=32, color='white')
+            # Create aesthetic text overlays - larger fonts for readability
+            arab_img = self._create_aesthetic_text(text_arab, fontsize=52, color='white', arabic=True)
+            trans_img = self._create_aesthetic_text(text_translation, fontsize=32, color='white', italic_style=True)
             
-            # Create surah reference text (QS: Surah Name: Ayat)
-            surah_ref = f"QS. {surah_name}: {ayat_number}"
-            ref_img = self._create_text_image(surah_ref, fontsize=28, color='#FFD700')  # Gold color
+            # Create surah reference with decorative style
+            surah_ref = f"— QS. {surah_name}: {ayat_number}"
+            ref_img = self._create_aesthetic_text(surah_ref, fontsize=24, color='#D4C4A8')  # Soft beige
             
-            # Get image heights for dynamic positioning
+            # Get image heights for positioning
             arab_height = arab_img.shape[0]
             trans_height = trans_img.shape[0]
             ref_height = ref_img.shape[0]
             
-            # Calculate dynamic positions based on content height
-            # Margins: top 8%, bottom 15% (more space at bottom for ref)
-            top_margin = int(self.height * 0.08)
-            bottom_margin = int(self.height * 0.15)
+            # Position content in center area (between calendar and bottom bar)
+            # Content starts at 35% from top, ends before bottom bar
+            content_start = int(self.height * 0.32)
+            content_end = self.height - 150  # Leave space for bottom bar
             
-            # Calculate spacing between elements
-            total_content_height = arab_height + trans_height + ref_height
-            available_height = self.height - top_margin - bottom_margin - total_content_height
-            spacing = available_height // 4
-            spacing = max(spacing, 25)  # Minimum 25px spacing
+            total_content_height = arab_height + trans_height + ref_height + 50
+            start_y = content_start + (content_end - content_start - total_content_height) // 2
             
-            # Position calculations (in pixels from top)
-            arab_y = top_margin + spacing
-            trans_y = arab_y + arab_height + spacing
-            ref_y = trans_y + trans_height + spacing  # Reference right after translation
-            logo_y = ref_y + ref_height + spacing  # Logo below surah reference
+            # Position calculations with tighter spacing
+            arab_y = start_y
+            trans_y = arab_y + arab_height + 25
+            ref_y = trans_y + trans_height + 25
             
-            # Create ImageClips with calculated positions
-            arab_clip = ImageClip(arab_img).set_duration(audio_duration)
+            # Create ImageClips with smooth fade-in transitions
+            # Arabic text - fade in first
+            arab_clip = ImageClip(arab_img).set_duration(video_duration)
             arab_clip = arab_clip.set_position(('center', arab_y))
+            arab_clip = arab_clip.crossfadein(self.fade_duration)
             
-            trans_clip = ImageClip(trans_img).set_duration(audio_duration)
+            # Translation - fade in with slight delay
+            trans_clip = ImageClip(trans_img).set_duration(video_duration - 0.4)
+            trans_clip = trans_clip.set_start(0.4)
             trans_clip = trans_clip.set_position(('center', trans_y))
+            trans_clip = trans_clip.crossfadein(self.fade_duration)
             
-            ref_clip = ImageClip(ref_img).set_duration(audio_duration)
+            # Surah reference - fade in last
+            ref_clip = ImageClip(ref_img).set_duration(video_duration - 0.8)
+            ref_clip = ref_clip.set_start(0.8)
             ref_clip = ref_clip.set_position(('center', ref_y))
+            ref_clip = ref_clip.crossfadein(self.fade_duration)
             
-            # Create list of clips for main content
-            main_clips = [main_video, arab_clip, trans_clip, ref_clip]
+            # Create status bar clip (top right)
+            status_bar_clip = ImageClip(status_bar_img).set_duration(video_duration)
+            status_bar_clip = status_bar_clip.set_position(('center', 10))
+            status_bar_clip = status_bar_clip.crossfadein(self.fade_duration)
+            
+            # Create calendar clip - positioned at top
+            calendar_clip = ImageClip(calendar_img).set_duration(video_duration)
+            calendar_clip = calendar_clip.set_position(('center', 60))
+            calendar_clip = calendar_clip.crossfadein(self.fade_duration)
+            
+            # Create bottom bar clip
+            bottom_bar_clip = ImageClip(bottom_bar_img).set_duration(video_duration)
+            bottom_bar_clip = bottom_bar_clip.set_position(('center', self.height - 100))
+            bottom_bar_clip = bottom_bar_clip.crossfadein(self.fade_duration)
+            
+            # Create list of clips
+            clips = [video, status_bar_clip, calendar_clip, arab_clip, trans_clip, ref_clip, bottom_bar_clip]
             
             # Add watermark
-            watermark_clip = self._create_watermark_clip(audio_duration)
-            main_clips.append(watermark_clip)
+            watermark_clip = self._create_watermark_clip(video_duration)
+            clips.append(watermark_clip)
             
-            # Composite main content
-            main_composite = CompositeVideoClip(main_clips)
-            main_composite = main_composite.set_audio(audio)
+            # Composite all clips
+            final = CompositeVideoClip(clips)
             
-            # Create CTA outro clip with AI-generated closing
-            cta_clip = self._create_cta_clip(video, text_translation)
+            # Set audio
+            final = final.set_audio(audio)
             
-            # Concatenate hook + main content + CTA
-            final = concatenate_videoclips([hook_clip, main_composite, cta_clip])
+            # Add fade in/out for smooth start and end
+            final = final.crossfadein(self.fade_duration)
+            final = final.crossfadeout(self.fade_duration)
             
             # Write output
             final.write_videofile(
@@ -237,125 +498,17 @@ class VideoGenerator:
             video.close()
             audio.close()
             final.close()
-            hook_clip.close()
-            main_composite.close()
-            cta_clip.close()
             
             return {
                 "output_file": str(output_path),
                 "filename": output_filename,
-                "duration": audio_duration,
+                "duration": video_duration,
                 "file_size": file_size
             }
             
         except Exception as e:
             raise Exception(f"Video generation failed: {str(e)}")
 
-    
-    def _generate_cta_with_ai(self, translation: str) -> Optional[str]:
-        """Generate CTA closing using AI API"""
-        import urllib.parse
-        import httpx
-        
-        prompt = f"""Buatkan 1 kalimat penutup video TikTok Islami yang mengajak penonton untuk follow/bagikan. Harus relevan dengan ayat berikut:
-
-"{translation}"
-
-ATURAN:
-1. Maksimal 8 kata
-2. Bahasa Indonesia
-3. JANGAN pakai emoji
-4. Ajak follow atau bagikan
-5. Relevan dengan isi ayat
-
-Contoh:
-- "Ikuti untuk ayat lainnya."
-- "Bagikan ayat ini sebagai kebaikan."
-- "Sebarkan kebaikan, ikuti kami."
-
-Tulis HANYA kalimat penutupnya:"""
-
-        try:
-            encoded_prompt = urllib.parse.quote(prompt)
-            url = f"{self.ai_api_url}?text={encoded_prompt}"
-            
-            response = httpx.get(url, timeout=10.0)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") and data.get("result"):
-                    cta = data["result"].strip().strip('"\'')
-                    if len(cta) <= 60:
-                        return cta
-            return None
-        except Exception as e:
-            print(f"AI CTA generation failed: {e}")
-            return None
-    
-    def _create_cta_clip(self, bg_video: VideoFileClip, translation: str = None) -> CompositeVideoClip:
-        """Create CTA outro clip (2 seconds)"""
-        import random
-        
-        # Try AI first if translation provided
-        cta_text = None
-        if translation:
-            cta_text = self._generate_cta_with_ai(translation)
-        
-        # Fallback to random CTA
-        if not cta_text:
-            cta_text = random.choice(self.cta_texts)
-        
-        # Create CTA text image
-        cta_img = self._create_text_image(cta_text, fontsize=44, color='#FFFFFF')
-        
-        # Get end portion of background video for CTA
-        start_time = max(0, bg_video.duration - self.cta_duration)
-        cta_bg = bg_video.subclip(start_time, bg_video.duration)
-        if cta_bg.duration < self.cta_duration:
-            cta_bg = cta_bg.loop(duration=self.cta_duration)
-        
-        # Darken CTA background (45% brightness)
-        cta_bg = cta_bg.fl_image(lambda frame: (frame * 0.45).astype(np.uint8))
-        
-        # Position CTA text in center
-        cta_text_clip = ImageClip(cta_img).set_duration(self.cta_duration)
-        cta_text_clip = cta_text_clip.set_position(('center', 'center'))
-        
-        # Add watermark to CTA
-        watermark_clip = self._create_watermark_clip(self.cta_duration)
-        
-        # Composite CTA with watermark
-        cta_composite = CompositeVideoClip([cta_bg, cta_text_clip, watermark_clip])
-        
-        return cta_composite
-    
-    def _create_hook_clip(self, hook_text: str, bg_video: VideoFileClip) -> CompositeVideoClip:
-        """Create hook intro clip (1.5 seconds)"""
-        # Create hook text image with larger font
-        hook_img = self._create_text_image(hook_text, fontsize=56, color='#FFFFFF')
-        
-        # Get a portion of background video for hook
-        hook_bg = bg_video.subclip(0, min(self.hook_duration, bg_video.duration))
-        if hook_bg.duration < self.hook_duration:
-            hook_bg = hook_bg.loop(duration=self.hook_duration)
-        else:
-            hook_bg = hook_bg.subclip(0, self.hook_duration)
-        
-        # Darken hook background more (40% brightness)
-        hook_bg = hook_bg.fl_image(lambda frame: (frame * 0.4).astype(np.uint8))
-        
-        # Position hook text in center
-        hook_clip = ImageClip(hook_img).set_duration(self.hook_duration)
-        hook_clip = hook_clip.set_position(('center', 'center'))
-        
-        # Add watermark to hook
-        watermark_clip = self._create_watermark_clip(self.hook_duration)
-        
-        # Composite hook with watermark
-        hook_composite = CompositeVideoClip([hook_bg, hook_clip, watermark_clip])
-        
-        return hook_composite
-    
     def _create_logo_clip(self, duration: float, y_position: int) -> Optional[ImageClip]:
         """Create logo clip with white color and transparent background"""
         if not self.logo_path.exists():
@@ -435,9 +588,9 @@ Tulis HANYA kalimat penutupnya:"""
         return watermark_clip
     
     def _darken_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Darken video frame by reducing brightness"""
-        # Reduce brightness to 50% (0.5 multiplier)
-        darkened = (frame * 0.5).astype(np.uint8)
+        """Darken video frame slightly for text readability while keeping aesthetic"""
+        # Reduce brightness to configured level (default 55%)
+        darkened = (frame * self.bg_darken).astype(np.uint8)
         return darkened
     
     def _resize_to_portrait(self, video: VideoFileClip) -> VideoFileClip:
