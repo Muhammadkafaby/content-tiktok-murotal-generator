@@ -730,19 +730,19 @@ class VideoGenerator:
             # Composite all clips
             final = CompositeVideoClip(clips)
             
-            # Set audio
+            # Set audio (no fade to avoid crackling at the end)
             final = final.set_audio(audio)
             
-            # Add fade in/out for smooth start and end
+            # Only fade in video, not fade out (to avoid audio crackling)
             final = final.crossfadein(self.fade_duration)
-            final = final.crossfadeout(self.fade_duration)
             
-            # Write output
+            # Write output with better audio settings
             final.write_videofile(
                 str(output_path),
                 fps=self.fps,
                 codec='libx264',
                 audio_codec='aac',
+                audio_bitrate='192k',
                 threads=4,
                 preset='medium',
                 logger=None
