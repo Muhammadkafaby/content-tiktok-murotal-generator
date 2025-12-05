@@ -432,10 +432,13 @@ class VideoGenerator:
         word_timings: list,
         video_duration: float,
         base_y: int,
-        fontsize: int = 56
+        fontsize: int = 56,
+        text_translation: str = ""
     ) -> list:
         """
-        Create text clips that appear word by word based on Quran.com timestamps.
+        Create text clips that appear one line at a time (subtitle style).
+        Each line replaces the previous one at the same position.
+        Translation appears below Arabic text with same timing.
         
         Args:
             text_arab: Full Arabic text
@@ -443,6 +446,7 @@ class VideoGenerator:
             video_duration: Total video duration
             base_y: Base Y position for text
             fontsize: Font size
+            text_translation: Indonesian translation text
             
         Returns:
             List of ImageClip objects
@@ -452,10 +456,11 @@ class VideoGenerator:
         
         clips = []
         words = text_arab.split()
-        fade_duration = 0.2  # Faster fade for better sync
+        trans_words = text_translation.split() if text_translation else []
+        fade_duration = 0.15  # Quick fade for smooth transition
         
-        # Group words into lines (max ~4 words per line for bigger text)
-        words_per_line = min(4, max(2, len(words) // 3))
+        # Group words into lines (3-4 words per line for readability)
+        words_per_line = min(4, max(3, len(words) // 3))
         lines = []
         current_line = []
         
@@ -467,41 +472,173 @@ class VideoGenerator:
         if current_line:
             lines.append(current_line)
         
-        # Calculate line heights (bigger spacing for larger font)
-        line_height = fontsize + 30
-        total_height = len(lines) * line_height
-        start_y = base_y - total_height // 2
+        # Split translation into same number of segments
+        trans_segments = []
+        if trans_words and len(lines) > 0:
+            trans_per_segment = len(trans_words) // len(lines)
+            remainder = len(trans_words) % len(lines)
+            start_idx = 0
+            for i in range(len(lines)):
+                extra = 1 if i < remainder else 0
+                end_idx = start_idx + trans_per_segment + extra
+                trans_segments.append(" ".join(trans_words[start_idx:end_idx]))
+                start_idx = end_idx
         
-        # Create clips for each line
+        # Translation Y position (below Arabic)
+        trans_y = base_y + 80
+        trans_fontsize = 28
+        
+        # Create clips for each line - all at SAME position (subtitle style)
         for line_idx, line_words in enumerate(lines):
-            # Get timing for this line (use first word's start time)
             first_word_idx = line_words[0][0]
             
-            # Find timing for first word in this line
+            # Get start time for this line
             line_start_ms = 0
             if first_word_idx < len(word_timings):
                 line_start_ms = word_timings[first_word_idx].get("start_ms", 0)
             
-            # Convert to seconds and subtract small offset for better sync
-            # Text should appear slightly before audio for better perception
-            line_start = max(0, (line_start_ms / 1000.0) - 0.1)
+            # Get end time (start of next line or end of audio)
+            if line_idx < len(lines) - 1:
+                next_first_idx = lines[line_idx + 1][0][0]
+                if next_first_idx < len(word_timings):
+                    line_end_ms = word_timings[next_first_idx].get("start_ms", 0)
+                else:
+                    line_end_ms = line_start_ms + 3000
+            else:
+                line_end_ms = video_duration * 1000
             
-            # Create text for this line
-            line_text = " ".join([w[1] for w in line_words])
-            line_img = self._create_aesthetic_text(line_text, fontsize=fontsize, color='white', arabic=True)
+            # Convert to seconds
+            line_start = max(0, (line_start_ms / 1000.0) - 0.05)
+            line_end = line_end_ms / 1000.0
             
-            # Calculate clip timing
-            clip_duration = video_duration - line_start
+            clip_duration = line_end - line_start
             if clip_duration <= 0:
                 continue
             
-            # Create clip
+            # Create Arabic text clip
+            line_text = " ".join([w[1] for w in line_words])
+            line_img = self._create_aesthetic_text(line_text, fontsize=fontsize, color='white', arabic=True)
+            
             line_clip = ImageClip(line_img).set_duration(clip_duration)
             line_clip = line_clip.set_start(line_start)
-            line_clip = line_clip.set_position(('center', start_y + line_idx * line_height))
+            line_clip = line_clip.set_position(('center', base_y))
             line_clip = line_clip.crossfadein(fade_duration)
-            
+            line_clip = line_clip.crossfadeout(fade_duration)
             clips.append(line_clip)
+            
+            # Create translation clip (below Arabic, same timing)
+            if line_idx < len(trans_segments) and trans_segments[line_idx]:
+                trans_img = self._create_aesthetic_text(
+                    trans_segments[line_idx], 
+                    fontsize=trans_fontsize, 
+                    color='#E0E0E0',  # Slightly dimmer white
+                    arabic=False
+                )
+                trans_clip = ImageClip(trans_img).set_duration(clip_duration)
+                trans_clip = trans_clip.set_start(line_start)
+                trans_clip = trans_clip.set_position(('center', trans_y))
+                trans_clip = trans_clip.crossfadein(fade_duration)
+                trans_clip = trans_clip.crossfadeout(fade_duration)
+                clips.append(trans_clip)
+        
+        return clips if clips else None
+
+    def _auto_split_by_audio_length(self, text: str, audio_duration: float) -> int:
+        """
+        Auto-calculate number of segments based on audio duration.
+        
+        Args:
+            text: Text to split
+            audio_duration: Audio duration in seconds
+            
+        Returns:
+            Optimal number of segments
+        """
+        words = text.split()
+        word_count = len(words)
+        
+        # Target: 2-3 seconds per segment for readability
+        target_segment_duration = 2.5
+        segments_by_duration = max(1, int(audio_duration / target_segment_duration))
+        
+        # Target: 3-5 words per segment
+        segments_by_words = max(1, word_count // 4)
+        
+        # Use the smaller of the two to ensure readability
+        num_segments = min(segments_by_duration, segments_by_words)
+        
+        # Clamp between 1 and 8 segments
+        return max(1, min(8, num_segments))
+
+    def _create_segment_clips_with_translation(
+        self,
+        text_arab: str,
+        text_translation: str,
+        audio_duration: float,
+        base_y: int,
+        fontsize: int = 52,
+        num_segments: int = None
+    ) -> list:
+        """
+        Create text clips with Arabic and translation appearing segment by segment.
+        Each segment shows Arabic text with translation below it.
+        
+        Args:
+            text_arab: Arabic text
+            text_translation: Translation text
+            audio_duration: Total audio duration
+            base_y: Base Y position for Arabic text
+            fontsize: Font size for Arabic
+            num_segments: Number of segments (auto-calculated if None)
+            
+        Returns:
+            List of ImageClip objects
+        """
+        # Auto-calculate segments if not specified
+        if num_segments is None:
+            num_segments = self._auto_split_by_audio_length(text_arab, audio_duration)
+        
+        arab_segments = self._split_text_into_segments(text_arab, num_segments)
+        trans_segments = self._split_text_into_segments(text_translation, num_segments) if text_translation else []
+        
+        clips = []
+        fade_duration = 0.3
+        
+        # Calculate timing - each segment gets equal time
+        segment_duration = audio_duration / len(arab_segments)
+        
+        # Translation position (below Arabic)
+        trans_y = base_y + 90
+        trans_fontsize = 26
+        
+        for i, arab_text in enumerate(arab_segments):
+            seg_start = i * segment_duration
+            seg_end = (i + 1) * segment_duration
+            clip_duration = seg_end - seg_start
+            
+            # Create Arabic text clip
+            arab_img = self._create_aesthetic_text(arab_text, fontsize=fontsize, color='white', arabic=True)
+            arab_clip = ImageClip(arab_img).set_duration(clip_duration)
+            arab_clip = arab_clip.set_start(seg_start)
+            arab_clip = arab_clip.set_position(('center', base_y))
+            arab_clip = arab_clip.crossfadein(fade_duration)
+            arab_clip = arab_clip.crossfadeout(fade_duration)
+            clips.append(arab_clip)
+            
+            # Create translation clip (same timing as Arabic)
+            if i < len(trans_segments) and trans_segments[i]:
+                trans_img = self._create_aesthetic_text(
+                    trans_segments[i],
+                    fontsize=trans_fontsize,
+                    color='#E0E0E0',
+                    arabic=False
+                )
+                trans_clip = ImageClip(trans_img).set_duration(clip_duration)
+                trans_clip = trans_clip.set_start(seg_start)
+                trans_clip = trans_clip.set_position(('center', trans_y))
+                trans_clip = trans_clip.crossfadein(fade_duration)
+                trans_clip = trans_clip.crossfadeout(fade_duration)
+                clips.append(trans_clip)
         
         return clips if clips else None
 
@@ -574,6 +711,231 @@ class VideoGenerator:
         
         return clips
 
+    def parse_srt(self, srt_content: str) -> list:
+        """
+        Parse SRT subtitle content into list of segments.
+        
+        Args:
+            srt_content: SRT file content as string
+            
+        Returns:
+            List of dicts with start_ms, end_ms, text
+        """
+        import re
+        
+        segments = []
+        blocks = srt_content.strip().split('\n\n')
+        
+        for block in blocks:
+            lines = block.strip().split('\n')
+            if len(lines) >= 3:
+                # Parse timestamp line (format: 00:00:00,000 --> 00:00:00,000)
+                timestamp_line = lines[1]
+                match = re.match(
+                    r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})',
+                    timestamp_line
+                )
+                if match:
+                    start_h, start_m, start_s, start_ms = map(int, match.groups()[:4])
+                    end_h, end_m, end_s, end_ms = map(int, match.groups()[4:])
+                    
+                    start_total_ms = (start_h * 3600 + start_m * 60 + start_s) * 1000 + start_ms
+                    end_total_ms = (end_h * 3600 + end_m * 60 + end_s) * 1000 + end_ms
+                    
+                    # Text is everything after timestamp
+                    text = '\n'.join(lines[2:])
+                    
+                    segments.append({
+                        'start_ms': start_total_ms,
+                        'end_ms': end_total_ms,
+                        'text': text
+                    })
+        
+        return segments
+
+    def _create_srt_clips(
+        self,
+        srt_segments: list,
+        base_y: int,
+        fontsize: int = 48,
+        arabic: bool = True,
+        translation_segments: list = None
+    ) -> list:
+        """
+        Create text clips from SRT segments with precise timing.
+        
+        Args:
+            srt_segments: List of SRT segments with start_ms, end_ms, text
+            base_y: Base Y position for text
+            fontsize: Font size
+            arabic: Whether text is Arabic
+            translation_segments: Optional translation SRT segments
+            
+        Returns:
+            List of ImageClip objects
+        """
+        clips = []
+        fade_duration = 0.15
+        trans_y = base_y + 90
+        trans_fontsize = 26
+        
+        for i, segment in enumerate(srt_segments):
+            start_sec = segment['start_ms'] / 1000.0
+            end_sec = segment['end_ms'] / 1000.0
+            clip_duration = end_sec - start_sec
+            
+            if clip_duration <= 0:
+                continue
+            
+            # Create main text clip
+            text_img = self._create_aesthetic_text(
+                segment['text'],
+                fontsize=fontsize,
+                color='white',
+                arabic=arabic
+            )
+            text_clip = ImageClip(text_img).set_duration(clip_duration)
+            text_clip = text_clip.set_start(start_sec)
+            text_clip = text_clip.set_position(('center', base_y))
+            text_clip = text_clip.crossfadein(fade_duration)
+            text_clip = text_clip.crossfadeout(fade_duration)
+            clips.append(text_clip)
+            
+            # Add translation if available
+            if translation_segments and i < len(translation_segments):
+                trans_seg = translation_segments[i]
+                trans_img = self._create_aesthetic_text(
+                    trans_seg['text'],
+                    fontsize=trans_fontsize,
+                    color='#E0E0E0',
+                    arabic=False
+                )
+                trans_clip = ImageClip(trans_img).set_duration(clip_duration)
+                trans_clip = trans_clip.set_start(start_sec)
+                trans_clip = trans_clip.set_position(('center', trans_y))
+                trans_clip = trans_clip.crossfadein(fade_duration)
+                trans_clip = trans_clip.crossfadeout(fade_duration)
+                clips.append(trans_clip)
+        
+        return clips if clips else None
+
+    async def generate_video_from_srt(
+        self,
+        background_path: str,
+        audio_path: str,
+        arabic_srt: str,
+        translation_srt: str = None,
+        surah_name: str = "Unknown",
+        ayat_number: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Generate video using SRT subtitles for precise timing.
+        
+        Args:
+            background_path: Path to background video
+            audio_path: Path to audio file
+            arabic_srt: Arabic SRT content
+            translation_srt: Optional translation SRT content
+            surah_name: Surah name for reference
+            ayat_number: Ayat number for reference
+            
+        Returns:
+            Dict with output file info
+        """
+        # Parse SRT files
+        arabic_segments = self.parse_srt(arabic_srt)
+        trans_segments = self.parse_srt(translation_srt) if translation_srt else None
+        
+        output_filename = f"quran_{surah_name}_{ayat_number}_{uuid.uuid4().hex[:8]}.mp4"
+        output_path = self.output_dir / output_filename
+        
+        try:
+            video = VideoFileClip(background_path)
+            audio = AudioFileClip(audio_path)
+            audio_duration = audio.duration
+            video_duration = max(audio_duration, self.min_video_duration)
+            
+            video = self._resize_to_portrait(video)
+            if video.duration < video_duration:
+                video = video.loop(duration=video_duration)
+            else:
+                video = video.subclip(0, video_duration)
+            video = video.fl_image(self._darken_frame)
+            
+            # Create UI elements
+            status_bar_img = self._create_status_bar()
+            calendar_img = self._create_calendar_overlay()
+            bottom_bar_img = self._create_bottom_bar()
+            
+            content_start = int(self.height * 0.28)
+            content_end = self.height - 150
+            arab_y = content_start + 180
+            
+            # Create SRT-based clips
+            srt_clips = self._create_srt_clips(
+                arabic_segments,
+                base_y=arab_y,
+                fontsize=56,
+                arabic=True,
+                translation_segments=trans_segments
+            )
+            
+            # Create reference
+            surah_ref = f"— QS. {surah_name}: {ayat_number}"
+            ref_img = self._create_aesthetic_text(surah_ref, fontsize=22, color='#D4C4A8')
+            ref_y = content_end - 60
+            ref_clip = ImageClip(ref_img).set_duration(video_duration)
+            ref_clip = ref_clip.set_start(0)
+            ref_clip = ref_clip.set_position(('center', ref_y))
+            ref_clip = ref_clip.crossfadein(0.5)
+            ref_clip = ref_clip.crossfadeout(0.5)
+            
+            # Create UI clips
+            status_bar_clip = ImageClip(status_bar_img).set_duration(video_duration)
+            status_bar_clip = status_bar_clip.set_position(('center', 10))
+            calendar_clip = ImageClip(calendar_img).set_duration(video_duration)
+            calendar_clip = calendar_clip.set_position(('center', 60))
+            bottom_bar_clip = ImageClip(bottom_bar_img).set_duration(video_duration)
+            bottom_bar_clip = bottom_bar_clip.set_position(('center', self.height - 100))
+            
+            clips = [video, status_bar_clip, calendar_clip]
+            if srt_clips:
+                clips.extend(srt_clips)
+            clips.extend([ref_clip, bottom_bar_clip])
+            
+            watermark_clip = self._create_watermark_clip(video_duration)
+            clips.append(watermark_clip)
+            
+            final = CompositeVideoClip(clips)
+            final = final.set_audio(audio)
+            final = final.crossfadein(self.fade_duration)
+            
+            final.write_videofile(
+                str(output_path),
+                fps=self.fps,
+                codec='libx264',
+                audio_codec='aac',
+                audio_bitrate='192k',
+                threads=4,
+                preset='medium',
+                logger=None
+            )
+            
+            file_size = os.path.getsize(output_path)
+            video.close()
+            audio.close()
+            final.close()
+            
+            return {
+                "output_file": str(output_path),
+                "filename": output_filename,
+                "duration": video_duration,
+                "file_size": file_size
+            }
+            
+        except Exception as e:
+            raise Exception(f"Video generation from SRT failed: {str(e)}")
+
     async def generate_video(
         self,
         background_path: str,
@@ -635,61 +997,41 @@ class VideoGenerator:
             if word_timings and len(word_timings) > 0:
                 # Use word-level timestamps for accurate sync with qari
                 # Font size 56 for better readability
+                # Include translation to show below Arabic text
                 arab_segment_clips = self._create_word_timed_clips(
                     text_arab=text_arab,
                     word_timings=word_timings,
                     video_duration=video_duration,
                     base_y=arab_y,
-                    fontsize=56
+                    fontsize=56,
+                    text_translation=text_translation
                 )
             
-            # Fallback to segment-based display if no word timings
+            # Fallback to segment-based display with translation if no word timings
             if not arab_segment_clips:
-                arab_words = len(text_arab.split())
-                num_segments = min(4, max(2, arab_words // 4))
-                arab_segment_clips = self._create_segment_clips(
-                    text=text_arab,
+                arab_segment_clips = self._create_segment_clips_with_translation(
+                    text_arab=text_arab,
+                    text_translation=text_translation,
                     audio_duration=audio_duration,
                     base_y=arab_y,
                     fontsize=56,
-                    arabic=True,
-                    num_segments=num_segments
+                    num_segments=None  # Auto-calculate based on audio length
                 )
             
-            # Create translation text (appears after Arabic segments)
-            trans_img = self._create_aesthetic_text(text_translation, fontsize=28, color='white', italic_style=True)
-            trans_height = trans_img.shape[0]
-            
-            # Create surah reference
+            # Create surah reference (translation now appears per-line below Arabic text)
             surah_ref = f"— QS. {surah_name}: {ayat_number}"
             ref_img = self._create_aesthetic_text(surah_ref, fontsize=22, color='#D4C4A8')
-            ref_height = ref_img.shape[0]
             
-            # Position translation and reference at bottom area
-            trans_y = content_end - trans_height - ref_height - 40
-            ref_y = trans_y + trans_height + 15
+            # Position reference at bottom area
+            ref_y = content_end - 60
             
-            # Translation appears after 70% of audio
-            trans_start = audio_duration * 0.7
-            trans_fade_in = 0.5
-            fade_out_duration = 0.5
-            
-            # Translation clip
-            trans_clip_duration = video_duration - trans_start
-            trans_clip = ImageClip(trans_img).set_duration(trans_clip_duration)
-            trans_clip = trans_clip.set_start(trans_start)
-            trans_clip = trans_clip.set_position(('center', trans_y))
-            trans_clip = trans_clip.crossfadein(trans_fade_in)
-            trans_clip = trans_clip.crossfadeout(fade_out_duration)
-            
-            # Reference clip - appears shortly after translation
-            ref_start = min(trans_start + 0.3, video_duration - 1.0)
-            ref_clip_duration = video_duration - ref_start
-            ref_clip = ImageClip(ref_img).set_duration(ref_clip_duration)
-            ref_clip = ref_clip.set_start(ref_start)
+            # Reference clip - visible throughout video
+            fade_duration = 0.5
+            ref_clip = ImageClip(ref_img).set_duration(video_duration)
+            ref_clip = ref_clip.set_start(0)
             ref_clip = ref_clip.set_position(('center', ref_y))
-            ref_clip = ref_clip.crossfadein(trans_fade_in)
-            ref_clip = ref_clip.crossfadeout(fade_out_duration)
+            ref_clip = ref_clip.crossfadein(fade_duration)
+            ref_clip = ref_clip.crossfadeout(fade_duration)
             
             # Create status bar clip (top right)
             status_bar_clip = ImageClip(status_bar_img).set_duration(video_duration)
@@ -721,8 +1063,8 @@ class VideoGenerator:
                 arab_clip = arab_clip.crossfadeout(0.5)
                 clips.append(arab_clip)
             
-            # Add translation and reference clips
-            clips.extend([trans_clip, ref_clip, bottom_bar_clip])
+            # Add reference and bottom bar clips (translation now appears per-line with Arabic)
+            clips.extend([ref_clip, bottom_bar_clip])
             
             # Add watermark
             watermark_clip = self._create_watermark_clip(video_duration)
