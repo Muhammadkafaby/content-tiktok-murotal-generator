@@ -104,6 +104,12 @@ class QuranService:
         if timestamp_data["audio_url"]:
             ayat_data["audio_url"] = timestamp_data["audio_url"]
             print(f"Using Quran.com synced audio: {timestamp_data['audio_url']}")
+            print(f"Word timings count: {len(timestamp_data['word_timings'])}")
+            if timestamp_data['word_timings']:
+                print(f"First timing: {timestamp_data['word_timings'][0]}")
+                print(f"Last timing: {timestamp_data['word_timings'][-1]}")
+        else:
+            print(f"Using fallback audio (not synced): {ayat_data['audio_url']}")
         
         return ayat_data
     

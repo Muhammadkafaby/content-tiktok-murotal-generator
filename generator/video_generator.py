@@ -524,8 +524,9 @@ class VideoGenerator:
             else:
                 line_end_ms = video_duration * 1000
             
-            # Convert to seconds
-            line_start = max(0, (line_start_ms / 1000.0) - 0.05)
+            # Convert to seconds - add small delay for better sync
+            # Text appears slightly after audio starts for better perception
+            line_start = max(0, line_start_ms / 1000.0)
             line_end = line_end_ms / 1000.0
             
             clip_duration = line_end - line_start
@@ -870,7 +871,11 @@ class VideoGenerator:
             video = VideoFileClip(background_path)
             audio = AudioFileClip(audio_path)
             audio_duration = audio.duration
-            video_duration = max(audio_duration, self.min_video_duration)
+            
+            # Add padding and fade out to prevent crackling
+            audio_padding = 1.0
+            video_duration = audio_duration + audio_padding
+            audio = audio.audio_fadeout(0.5)
             
             video = self._resize_to_portrait(video)
             if video.duration < video_duration:
@@ -973,8 +978,14 @@ class VideoGenerator:
             audio = AudioFileClip(audio_path)
             audio_duration = audio.duration
             
-            # Calculate video duration (minimum 10 seconds or audio length)
-            video_duration = max(audio_duration, self.min_video_duration)
+            # Add small padding after audio ends (1 second silence)
+            audio_padding = 1.0
+            
+            # Video duration = audio duration + padding (no minimum to avoid crackling)
+            video_duration = audio_duration + audio_padding
+            
+            # Apply audio fade out to prevent crackling at the end
+            audio = audio.audio_fadeout(0.5)
             
             # Calculate synchronized text timing based on audio
             text_timing = self._calculate_text_timing(audio_duration, text_arab, text_translation)
