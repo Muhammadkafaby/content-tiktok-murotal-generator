@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y \
     fonts-freefont-ttf \
     fonts-noto-core \
     fonts-arabeyes \
+    wget \
+    unzip \
     libglib2.0-0 \
     libnss3 \
     libnspr4 \
@@ -38,6 +40,14 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Download and install Amiri Quran font (proper Hafs style for Quran)
+RUN mkdir -p /usr/share/fonts/truetype/amiri && \
+    wget -q "https://github.com/aliftype/amiri/releases/download/1.000/Amiri-1.000.zip" -O /tmp/amiri.zip && \
+    unzip -q /tmp/amiri.zip -d /tmp/amiri && \
+    find /tmp/amiri -name "*.ttf" -exec cp {} /usr/share/fonts/truetype/amiri/ \; && \
+    fc-cache -f -v && \
+    rm -rf /tmp/amiri /tmp/amiri.zip
 
 # Fix ImageMagick security policy to allow text operations
 RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \

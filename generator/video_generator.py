@@ -45,8 +45,10 @@ class VideoGenerator:
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
             "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
         ]
-        # Font paths for Arabic text
+        # Font paths for Arabic text (Amiri Quran - proper Hafs style)
         self.arabic_font_paths = [
+            "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf",
+            "/usr/share/fonts/truetype/amiri/AmiriQuran-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
             "/usr/share/fonts/truetype/fonts-arabeyes/ae_AlArabiya.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
