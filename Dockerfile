@@ -41,13 +41,24 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Amiri Quran font (proper Hafs style for Quran)
+# Download and install Amiri Quran font (best Arabic font available)
 RUN mkdir -p /usr/share/fonts/truetype/amiri && \
     wget -q "https://github.com/aliftype/amiri/releases/download/1.000/Amiri-1.000.zip" -O /tmp/amiri.zip && \
     unzip -q /tmp/amiri.zip -d /tmp/amiri && \
     find /tmp/amiri -name "*.ttf" -exec cp {} /usr/share/fonts/truetype/amiri/ \; && \
-    fc-cache -f -v && \
     rm -rf /tmp/amiri /tmp/amiri.zip
+
+# Download Scheherazade New font (excellent Quran font)
+RUN mkdir -p /usr/share/fonts/truetype/scheherazade && \
+    wget -q "https://github.com/nicolo-ribaudo/quran-fonts/raw/main/fonts/Scheherazade-Regular.ttf" \
+    -O "/usr/share/fonts/truetype/scheherazade/Scheherazade-Regular.ttf" || \
+    wget -q "https://software.sil.org/downloads/r/scheherazade/ScheherazadeNew-3.300.zip" -O /tmp/scheherazade.zip && \
+    unzip -q /tmp/scheherazade.zip -d /tmp/scheherazade && \
+    find /tmp/scheherazade -name "*.ttf" -exec cp {} /usr/share/fonts/truetype/scheherazade/ \; && \
+    rm -rf /tmp/scheherazade /tmp/scheherazade.zip || true
+
+# Update font cache
+RUN fc-cache -f -v
 
 # Fix ImageMagick security policy to allow text operations
 RUN if [ -f /etc/ImageMagick-6/policy.xml ]; then \

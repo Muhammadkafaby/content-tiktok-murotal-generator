@@ -51,10 +51,13 @@ class VideoGenerator:
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
             "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
         ]
-        # Font paths for Arabic text (Amiri Quran - proper Hafs style)
+        # Font paths for Arabic text - Amiri Quran style (beautiful Naskh script)
+        # Priority: Amiri Quran > Scheherazade > Noto Naskh > DejaVu
         self.arabic_font_paths = [
-            "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf",
             "/usr/share/fonts/truetype/amiri/AmiriQuran-Regular.ttf",
+            "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf",
+            "/usr/share/fonts/truetype/scheherazade/Scheherazade-Regular.ttf",
+            "/usr/share/fonts/truetype/scheherazade/ScheherazadeNew-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
             "/usr/share/fonts/truetype/fonts-arabeyes/ae_AlArabiya.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -65,8 +68,22 @@ class VideoGenerator:
         font_list = self.arabic_font_paths if arabic else self.font_paths
         for font_path in font_list:
             if os.path.exists(font_path):
-                return ImageFont.truetype(font_path, size)
-        # Fallback to default
+                try:
+                    return ImageFont.truetype(font_path, size)
+                except Exception:
+                    continue
+        # Fallback to DejaVu (always available in Docker)
+        fallback_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        ]
+        for fallback in fallback_paths:
+            if os.path.exists(fallback):
+                try:
+                    return ImageFont.truetype(fallback, size)
+                except Exception:
+                    continue
+        # Last resort - use default font
         return ImageFont.load_default()
     
     def _create_text_image(
@@ -862,14 +879,13 @@ class VideoGenerator:
                 video = video.subclip(0, video_duration)
             video = video.fl_image(self._darken_frame)
             
-            # Create UI elements
+            # Create UI elements (calendar/date removed)
             status_bar_img = self._create_status_bar()
-            calendar_img = self._create_calendar_overlay()
             bottom_bar_img = self._create_bottom_bar()
             
-            content_start = int(self.height * 0.28)
+            content_start = int(self.height * 0.20)  # Adjusted since no calendar
             content_end = self.height - 150
-            arab_y = content_start + 180
+            arab_y = content_start + 150
             
             # Create SRT-based clips
             srt_clips = self._create_srt_clips(
@@ -890,15 +906,13 @@ class VideoGenerator:
             ref_clip = ref_clip.crossfadein(0.5)
             ref_clip = ref_clip.crossfadeout(0.5)
             
-            # Create UI clips
+            # Create UI clips (calendar removed)
             status_bar_clip = ImageClip(status_bar_img).set_duration(video_duration)
             status_bar_clip = status_bar_clip.set_position(('center', 10))
-            calendar_clip = ImageClip(calendar_img).set_duration(video_duration)
-            calendar_clip = calendar_clip.set_position(('center', 60))
             bottom_bar_clip = ImageClip(bottom_bar_img).set_duration(video_duration)
             bottom_bar_clip = bottom_bar_clip.set_position(('center', self.height - 100))
             
-            clips = [video, status_bar_clip, calendar_clip]
+            clips = [video, status_bar_clip]
             if srt_clips:
                 clips.extend(srt_clips)
             clips.extend([ref_clip, bottom_bar_clip])
@@ -980,17 +994,16 @@ class VideoGenerator:
             # Darken the background slightly for text readability
             video = video.fl_image(self._darken_frame)
             
-            # Create iPhone lock screen elements
+            # Create iPhone lock screen elements (calendar/date removed)
             status_bar_img = self._create_status_bar()
-            calendar_img = self._create_calendar_overlay()
             bottom_bar_img = self._create_bottom_bar()
             
-            # Position content in center area (between calendar and bottom bar)
-            content_start = int(self.height * 0.28)
+            # Position content in center area (adjusted since no calendar)
+            content_start = int(self.height * 0.20)
             content_end = self.height - 150
             
             # Arabic text position (centered in content area)
-            arab_y = content_start + 180
+            arab_y = content_start + 150
             
             # Try to use word timings from Quran.com API for accurate sync
             arab_segment_clips = None
@@ -1038,18 +1051,13 @@ class VideoGenerator:
             status_bar_clip = status_bar_clip.set_position(('center', 10))
             status_bar_clip = status_bar_clip.crossfadein(self.fade_duration)
             
-            # Create calendar clip - positioned at top
-            calendar_clip = ImageClip(calendar_img).set_duration(video_duration)
-            calendar_clip = calendar_clip.set_position(('center', 60))
-            calendar_clip = calendar_clip.crossfadein(self.fade_duration)
-            
             # Create bottom bar clip
             bottom_bar_clip = ImageClip(bottom_bar_img).set_duration(video_duration)
             bottom_bar_clip = bottom_bar_clip.set_position(('center', self.height - 100))
             bottom_bar_clip = bottom_bar_clip.crossfadein(self.fade_duration)
             
-            # Create list of clips
-            clips = [video, status_bar_clip, calendar_clip]
+            # Create list of clips (calendar/date removed)
+            clips = [video, status_bar_clip]
             
             # Add Arabic segment clips (segment by segment display)
             if arab_segment_clips:
