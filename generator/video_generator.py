@@ -484,8 +484,8 @@ class VideoGenerator:
                 trans_segments.append(" ".join(trans_words[start_idx:end_idx]))
                 start_idx = end_idx
         
-        # Translation Y position (below Arabic)
-        trans_y = base_y + 80
+        # Translation Y position (below Arabic) - increased spacing
+        trans_y = base_y + 130
         trans_fontsize = 28
         
         # Create clips for each line - all at SAME position (subtitle style)
@@ -607,8 +607,8 @@ class VideoGenerator:
         # Calculate timing - each segment gets equal time
         segment_duration = audio_duration / len(arab_segments)
         
-        # Translation position (below Arabic)
-        trans_y = base_y + 90
+        # Translation position (below Arabic) - increased spacing
+        trans_y = base_y + 130
         trans_fontsize = 26
         
         for i, arab_text in enumerate(arab_segments):
@@ -776,7 +776,7 @@ class VideoGenerator:
         """
         clips = []
         fade_duration = 0.15
-        trans_y = base_y + 90
+        trans_y = base_y + 130  # Increased spacing between Arabic and translation
         trans_fontsize = 26
         
         for i, segment in enumerate(srt_segments):
