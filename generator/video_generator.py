@@ -432,7 +432,7 @@ class VideoGenerator:
         word_timings: list,
         video_duration: float,
         base_y: int,
-        fontsize: int = 48
+        fontsize: int = 56
     ) -> list:
         """
         Create text clips that appear word by word based on Quran.com timestamps.
@@ -452,10 +452,10 @@ class VideoGenerator:
         
         clips = []
         words = text_arab.split()
-        fade_duration = 0.3
+        fade_duration = 0.2  # Faster fade for better sync
         
-        # Group words into lines (max ~5 words per line for readability)
-        words_per_line = min(5, max(3, len(words) // 3))
+        # Group words into lines (max ~4 words per line for bigger text)
+        words_per_line = min(4, max(2, len(words) // 3))
         lines = []
         current_line = []
         
@@ -467,8 +467,8 @@ class VideoGenerator:
         if current_line:
             lines.append(current_line)
         
-        # Calculate line heights
-        line_height = fontsize + 20
+        # Calculate line heights (bigger spacing for larger font)
+        line_height = fontsize + 30
         total_height = len(lines) * line_height
         start_y = base_y - total_height // 2
         
@@ -476,14 +476,15 @@ class VideoGenerator:
         for line_idx, line_words in enumerate(lines):
             # Get timing for this line (use first word's start time)
             first_word_idx = line_words[0][0]
-            last_word_idx = line_words[-1][0]
             
             # Find timing for first word in this line
             line_start_ms = 0
             if first_word_idx < len(word_timings):
                 line_start_ms = word_timings[first_word_idx].get("start_ms", 0)
             
-            line_start = line_start_ms / 1000.0  # Convert to seconds
+            # Convert to seconds and subtract small offset for better sync
+            # Text should appear slightly before audio for better perception
+            line_start = max(0, (line_start_ms / 1000.0) - 0.1)
             
             # Create text for this line
             line_text = " ".join([w[1] for w in line_words])
@@ -499,7 +500,6 @@ class VideoGenerator:
             line_clip = line_clip.set_start(line_start)
             line_clip = line_clip.set_position(('center', start_y + line_idx * line_height))
             line_clip = line_clip.crossfadein(fade_duration)
-            line_clip = line_clip.crossfadeout(fade_duration)
             
             clips.append(line_clip)
         
@@ -627,19 +627,20 @@ class VideoGenerator:
             content_start = int(self.height * 0.28)
             content_end = self.height - 150
             
-            # Arabic text position
-            arab_y = content_start + 150
+            # Arabic text position (centered in content area)
+            arab_y = content_start + 180
             
             # Try to use word timings from Quran.com API for accurate sync
             arab_segment_clips = None
             if word_timings and len(word_timings) > 0:
                 # Use word-level timestamps for accurate sync with qari
+                # Font size 56 for better readability
                 arab_segment_clips = self._create_word_timed_clips(
                     text_arab=text_arab,
                     word_timings=word_timings,
                     video_duration=video_duration,
                     base_y=arab_y,
-                    fontsize=44
+                    fontsize=56
                 )
             
             # Fallback to segment-based display if no word timings
@@ -650,7 +651,7 @@ class VideoGenerator:
                     text=text_arab,
                     audio_duration=audio_duration,
                     base_y=arab_y,
-                    fontsize=44,
+                    fontsize=56,
                     arabic=True,
                     num_segments=num_segments
                 )
